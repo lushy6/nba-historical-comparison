@@ -11,6 +11,7 @@ backend/htmlcov/
 frontend/node_modules/
 frontend/.next/
 frontend/coverage/
+frontend/*.tsbuildinfo
 
 # Local data and configuration
 nba.sqlite
