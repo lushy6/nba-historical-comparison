@@ -1,40 +1,46 @@
 ﻿"use client";
 
 import * as Popover from "@radix-ui/react-popover";
-import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { ApiError, loadComparison, loadFilterOptions, searchHistory } from "@/lib/api";
 import type { Comparison, ComparisonScope, EntityKind, FilterOptions, SearchItem } from "@/lib/types";
 
 import { ComparisonDashboard } from "./comparison-dashboard";
 import { ComparisonFilters } from "./comparison-filters";
+import { EntityAvatar } from "./entity-avatar";
 
 
 export function SearchExperience() {
-  const reducedMotion = useReducedMotion();
   const [kind, setKind] = useState<EntityKind>("player");
   const [query, setQuery] = useState("");
   const [scope, setScope] = useState<ComparisonScope>({});
   const [items, setItems] = useState<SearchItem[]>([]);
   const [filterOptions, setFilterOptions] = useState<FilterOptions | null>(null);
+  const [filterError, setFilterError] = useState<string | null>(null);
   const [isSearching, setIsSearching] = useState(false);
   const [isLoadingComparison, setIsLoadingComparison] = useState(false);
   const [comparison, setComparison] = useState<Comparison | null>(null);
   const [activeMatchId, setActiveMatchId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const visibleItems = query.trim().length >= 2 ? items : [];
+  const comparisonRequest = useRef<AbortController | null>(null);
+  const searchRequest = useRef<AbortController | null>(null);
+  const visibleItems = query.trim().length >= 2 ? items.slice(0, 15) : [];
+
+  useEffect(() => () => {
+    comparisonRequest.current?.abort();
+  }, []);
 
   // Load filter options whenever kind changes
   useEffect(() => {
     const controller = new AbortController();
     loadFilterOptions(kind, controller.signal)
       .then((opts) => {
-        setFilterOptions(opts);
+        if (!controller.signal.aborted) setFilterOptions(opts);
       })
       .catch((err: unknown) => {
-        if ((err as Error).name !== "AbortError") {
-          setFilterOptions({ seasons: [], teams: [], team_filter_available: false });
+        if (!controller.signal.aborted && (err as Error).name !== "AbortError") {
+          setFilterError("Comparison filters could not load. Try switching comparison type to retry.");
         }
       });
     return () => controller.abort();
@@ -46,18 +52,24 @@ export function SearchExperience() {
     if (trimmedQuery.length < 2) return;
 
     const controller = new AbortController();
+    searchRequest.current = controller;
     const timer = window.setTimeout(() => {
+      if (controller.signal.aborted) return;
       setIsSearching(true);
       setError(null);
       searchHistory(kind, trimmedQuery, scope, controller.signal)
-        .then((response) => setItems(response.items))
+        .then((response) => {
+          if (!controller.signal.aborted) setItems(response.items.slice(0, 15));
+        })
         .catch((requestError: unknown) => {
-          if ((requestError as Error).name !== "AbortError") {
+          if (!controller.signal.aborted && (requestError as Error).name !== "AbortError") {
             setItems([]);
             setError(messageForError(requestError));
           }
         })
-        .finally(() => setIsSearching(false));
+        .finally(() => {
+          if (!controller.signal.aborted) setIsSearching(false);
+        });
     }, 160);
 
     return () => {
@@ -66,36 +78,55 @@ export function SearchExperience() {
     };
   }, [kind, query, scope]);
 
-  const selectItem = useCallback(async (item: SearchItem) => {
+  function cancelRequests() {
+    comparisonRequest.current?.abort();
+    searchRequest.current?.abort();
+    setIsLoadingComparison(false);
+    setIsSearching(false);
     setItems([]);
+  }
+
+  async function selectItem(item: SearchItem) {
+    cancelRequests();
+    const controller = new AbortController();
+    comparisonRequest.current = controller;
     setError(null);
     setIsLoadingComparison(true);
     try {
-      const result = await loadComparison(item.kind, item.id, scope);
-      setComparison(result);
+      const result = await loadComparison(item.kind, item.id, scope, controller.signal);
+      if (controller.signal.aborted) return;
+      setComparison({ ...result, matches: result.matches.slice(0, 15) });
       setActiveMatchId(result.matches[0]?.profile.id ?? null);
     } catch (requestError) {
+      if (controller.signal.aborted) return;
       setComparison(null);
       setActiveMatchId(null);
       setError(messageForError(requestError));
     } finally {
-      setIsLoadingComparison(false);
+      if (!controller.signal.aborted) setIsLoadingComparison(false);
     }
-  }, [scope]);
+  }
 
   function switchKind(nextKind: EntityKind) {
+    if (nextKind === kind) return;
+    cancelRequests();
     setKind(nextKind);
     setScope({});
     setFilterOptions(null);
+    setFilterError(null);
     setComparison(null);
     setActiveMatchId(null);
-    setItems([]);
     setQuery("");
     setError(null);
   }
 
   function handleScopeChange(nextScope: ComparisonScope) {
+    if (nextScope.season_from === scope.season_from && nextScope.season_to === scope.season_to && nextScope.team === scope.team) return;
+    cancelRequests();
     setScope(nextScope);
+    setComparison(null);
+    setActiveMatchId(null);
+    setError(null);
   }
 
   return (
@@ -166,8 +197,11 @@ export function SearchExperience() {
               <p className="results-label">Choose a {kind} season</p>
               {visibleItems.map((item) => (
                 <button key={item.id} type="button" className="result-option" onClick={() => void selectItem(item)}>
-                  <span>{item.name}</span>
-                  <small>{item.season}</small>
+                  <EntityAvatar entity={item} size="small" decorative />
+                  <span className="result-context">
+                    <span>{item.name}</span>
+                    <small>{item.season}{item.teams.length > 0 && ` · ${item.teams.map((team) => team.name).join(", ")}`}</small>
+                  </span>
                 </button>
               ))}
             </Popover.Content>
@@ -179,14 +213,14 @@ export function SearchExperience() {
           value={scope}
           options={filterOptions}
           onChange={handleScopeChange}
-          disabled={isLoadingComparison}
+          disabled={false}
+          error={filterError}
         />
 
         <p className="search-caption">Powered by your local NBA historical database. No scores are guessed.</p>
 
-        <AnimatePresence mode="wait">
           {isLoadingComparison ? (
-            <LoadingResult key="loading" reducedMotion={Boolean(reducedMotion)} />
+            <div className="comparison-loading" role="status">Measuring the historical shape.</div>
           ) : error ? (
             <ErrorResult key="error" message={error} />
           ) : comparison && activeMatchId ? (
@@ -195,10 +229,11 @@ export function SearchExperience() {
               comparison={comparison}
               kind={kind}
               activeMatchId={activeMatchId}
-              onActiveMatchChange={setActiveMatchId}
+              onActiveMatchChange={(id) => {
+                if (comparison.matches.some((match) => match.profile.id === id)) setActiveMatchId(id);
+              }}
             />
           ) : null}
-        </AnimatePresence>
       </section>
 
       <aside className="method-note" aria-label="Comparison methodology">
@@ -206,21 +241,6 @@ export function SearchExperience() {
         <p><strong>How it works</strong><span>Stat profiles are standardized before we measure the nearest historical shape.</span></p>
       </aside>
     </main>
-  );
-}
-
-function LoadingResult({ reducedMotion }: { reducedMotion: boolean }) {
-  return (
-    <motion.div
-      aria-live="polite"
-      className="comparison-loading"
-      initial={reducedMotion ? { opacity: 0 } : { opacity: 0, transform: "translateY(6px)" }}
-      animate={{ opacity: 1, transform: "translateY(0px)" }}
-      exit={{ opacity: 0 }}
-      transition={{ duration: 0.18, ease: [0.23, 1, 0.32, 1] }}
-    >
-      Measuring the historical shape.
-    </motion.div>
   );
 }
 

@@ -1,8 +1,9 @@
 ﻿import { fireEvent, render, screen } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
+import { useState } from "react";
 
 import { ComparisonFilters } from "./comparison-filters";
-import type { FilterOptions } from "@/lib/types";
+import type { ComparisonScope, FilterOptions } from "@/lib/types";
 
 
 const playerOptions: FilterOptions = {
@@ -22,13 +23,15 @@ const teamOptions: FilterOptions = {
 
 it("emits an inclusive player scope with a team", () => {
   const onChange = vi.fn();
-  // Use controlled state simulation with individual changes
-  render(<ComparisonFilters kind="player" value={{}} options={playerOptions} onChange={onChange} disabled={false} />);
+  function ControlledFilters() {
+    const [scope, setScope] = useState<ComparisonScope>({});
+    return <ComparisonFilters kind="player" value={scope} options={playerOptions} onChange={(next) => { onChange(next); setScope(next); }} disabled={false} />;
+  }
+  render(<ControlledFilters />);
   fireEvent.change(screen.getByLabelText("From season"), { target: { value: "2015" } });
-  expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ season_from: 2015 }));
-
+  fireEvent.change(screen.getByLabelText("To season"), { target: { value: "2022" } });
   fireEvent.change(screen.getByLabelText("Team"), { target: { value: "MIA" } });
-  expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ team: "MIA" }));
+  expect(onChange).toHaveBeenLastCalledWith({ season_from: 2015, season_to: 2022, team: "MIA" });
 });
 
 it("does not render a team selector for team comparisons", () => {

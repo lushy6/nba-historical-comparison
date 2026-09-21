@@ -1,7 +1,5 @@
 ﻿"use client";
 
-import { motion, useReducedMotion } from "framer-motion";
-
 import { EntityAvatar } from "./entity-avatar";
 import { SimilarityLeaderboard } from "./similarity-leaderboard";
 import { ComparisonCharts } from "./comparison-charts";
@@ -16,8 +14,6 @@ type ComparisonDashboardProps = {
 };
 
 export function ComparisonDashboard({ comparison, kind, activeMatchId, onActiveMatchChange }: ComparisonDashboardProps) {
-  const reducedMotion = useReducedMotion();
-
   const activeMatch: RankedMatch = comparison.matches.find(
     (m) => m.profile.id === activeMatchId
   ) ?? comparison.matches[0];
@@ -29,12 +25,9 @@ export function ComparisonDashboard({ comparison, kind, activeMatchId, onActiveM
       : "score-low";
 
   return (
-    <motion.section
+    <section
       aria-label="Historical comparison result"
       className="comparison-result"
-      initial={reducedMotion ? { opacity: 0 } : { opacity: 0, transform: "translateY(12px)" }}
-      animate={{ opacity: 1, transform: "translateY(0px)" }}
-      transition={{ duration: 0.24, ease: [0.23, 1, 0.32, 1] }}
     >
       {/* Heading row */}
       <div className="comparison-heading">
@@ -94,6 +87,6 @@ export function ComparisonDashboard({ comparison, kind, activeMatchId, onActiveM
           matches={comparison.matches}
         />
       </div>
-    </motion.section>
+    </section>
   );
 }

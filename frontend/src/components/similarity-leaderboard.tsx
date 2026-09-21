@@ -13,18 +13,20 @@ type SimilarityLeaderboardProps = {
 
 export function SimilarityLeaderboard({ kind, selectedId, matches, onSelect }: SimilarityLeaderboardProps) {
   if (matches.length === 0) return null;
+  const visibleMatches = matches.slice(0, 15);
 
   return (
     <nav aria-label="Top matches leaderboard" className="leaderboard">
-      <p className="leaderboard-heading">Top {matches.length} historical matches</p>
+      <p className="leaderboard-heading">Top {visibleMatches.length} historical matches</p>
       <ol className="leaderboard-list">
-        {matches.map((match) => {
+        {visibleMatches.map((match) => {
           const isActive = match.profile.id === selectedId;
           return (
             <li key={match.profile.id}>
               <button
                 type="button"
-                className={`leaderboard-row${isActive ? " is-active" : ""}`}
+                className="leaderboard-row"
+                data-active={isActive}
                 aria-current={isActive ? "true" : undefined}
                 onClick={() => onSelect(match.profile.id)}
                 onKeyDown={(e) => {

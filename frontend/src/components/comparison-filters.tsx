@@ -9,9 +9,10 @@ type ComparisonFiltersProps = {
   options: FilterOptions | null;
   onChange: (scope: ComparisonScope) => void;
   disabled: boolean;
+  error?: string | null;
 };
 
-export function ComparisonFilters({ kind, value, options, onChange, disabled }: ComparisonFiltersProps) {
+export function ComparisonFilters({ kind, value, options, onChange, disabled, error }: ComparisonFiltersProps) {
   function handleSeasonFrom(event: React.ChangeEvent<HTMLSelectElement>) {
     const raw = event.target.value;
     onChange({ ...value, season_from: raw ? Number(raw) : undefined });
@@ -32,8 +33,15 @@ export function ComparisonFilters({ kind, value, options, onChange, disabled }: 
   const showTeamFilter = kind === "player" && (options?.team_filter_available ?? false);
 
   return (
-    <fieldset className="filter-controls" disabled={disabled || !options}>
+    <fieldset className="filter-controls" disabled={disabled || !options} aria-busy={!options && !error}>
       <legend>Comparison pool</legend>
+
+      {!options && !error && <>
+        <span role="status" className="filter-status">Loading comparison filters…</span>
+        <span className="filter-skeleton" aria-hidden="true" />
+        <span className="filter-skeleton" aria-hidden="true" />
+      </>}
+      {error && <span role="alert" className="filter-error">{error}</span>}
 
       <div className="filter-row">
         <label htmlFor="filter-season-from" className="filter-label">From season</label>
