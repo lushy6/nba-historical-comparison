@@ -1,4 +1,4 @@
-import asyncio
+﻿import asyncio
 from pathlib import Path
 
 import httpx
@@ -17,9 +17,11 @@ def test_health_reports_when_the_optional_dataset_is_missing(tmp_path: Path, mon
     response = asyncio.run(request_health())
 
     assert response.status_code == 200
-    assert response.json() == {
-        "status": "dataset_missing",
-        "database_path": "nba.sqlite",
-        "tables": [],
-        "message": "Place nba.sqlite in the project root to enable comparisons.",
-    }
+    payload = response.json()
+    assert payload["status"] == "dataset_missing"
+    assert payload["database_path"] == "nba.sqlite"
+    assert payload["tables"] == []
+    assert "Place nba.sqlite" in payload["message"]
+    # Task 9: health now exposes source_format and identity_available
+    assert payload["identity_available"] is False
+    assert payload["source_format"] in ("sqlite", "historical_csv")
