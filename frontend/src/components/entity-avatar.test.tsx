@@ -1,9 +1,15 @@
 ﻿import { fireEvent, render, screen } from "@testing-library/react";
-import { expect, it } from "vitest";
+import type { ImgHTMLAttributes } from "react";
+import { expect, it, vi } from "vitest";
 
 import { EntityAvatar } from "./entity-avatar";
 import type { Profile } from "@/lib/types";
 
+vi.mock("next/image", () => ({
+  default: ({ fill, ...props }: ImgHTMLAttributes<HTMLImageElement> & { fill?: boolean }) => (
+    <img {...props} data-fill={String(fill)} />
+  ),
+}));
 
 const playerWithImage: Profile = {
   id: "2544:2023",
@@ -31,7 +37,20 @@ const teamWithoutImage: Profile = {
 
 it("renders an image when image_url is present", () => {
   render(<EntityAvatar entity={playerWithImage} size="medium" />);
-  expect(screen.getByRole("img", { name: /LeBron James/i })).toBeInTheDocument();
+  const image = screen.getByRole("img", { name: /LeBron James/i });
+  expect(image).toHaveAttribute("data-fill", "true");
+  expect(image).toHaveAttribute("sizes", "48px");
+});
+
+it("keeps a fixed skeleton until the remote image finishes loading", () => {
+  const { container } = render(<EntityAvatar entity={playerWithImage} size="medium" />);
+  const frame = container.firstChild as HTMLElement;
+  const widthBefore = window.getComputedStyle(frame).width;
+
+  expect(screen.getByTestId("avatar-skeleton")).toBeInTheDocument();
+  fireEvent.load(screen.getByRole("img", { name: /LeBron James/i }));
+  expect(screen.queryByTestId("avatar-skeleton")).not.toBeInTheDocument();
+  expect(window.getComputedStyle(frame).width).toBe(widthBefore);
 });
 
 it("renders monogram fallback when no image_url", () => {
@@ -45,6 +64,29 @@ it("uses a stable monogram after a remote image error", () => {
   const img = screen.getByRole("img", { name: /LeBron James/i });
   fireEvent.error(img);
   expect(screen.getByText("LJ")).toBeInTheDocument();
+});
+
+it("retries an image when the entity source changes after an error", () => {
+  const { rerender } = render(<EntityAvatar entity={playerWithImage} size="medium" />);
+  fireEvent.error(screen.getByRole("img", { name: /LeBron James/i }));
+  expect(screen.getByText("LJ")).toBeInTheDocument();
+
+  const nextPlayer: Profile = {
+    ...playerWithImage,
+    id: "2544:2024",
+    season: "2023-24",
+    visual: {
+      ...playerWithImage.visual,
+      image_url: "https://cdn.nba.com/headshots/nba/latest/1040x760/2544-new.png",
+    },
+  };
+  rerender(<EntityAvatar entity={nextPlayer} size="medium" />);
+
+  expect(screen.getByRole("img", { name: /LeBron James/i })).toHaveAttribute(
+    "src",
+    expect.stringContaining("2544-new.png"),
+  );
+  expect(screen.getByTestId("avatar-skeleton")).toBeInTheDocument();
 });
 
 it("renders a decorative fallback without an accessible duplicate label", () => {

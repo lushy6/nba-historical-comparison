@@ -1,9 +1,6 @@
 ﻿export type EntityKind = "player" | "team";
 
-export type SearchItem = {
-  id: string;
-  name: string;
-  season: string;
+export type SearchItem = Profile & {
   kind: EntityKind;
 };
 

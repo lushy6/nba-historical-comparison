@@ -1,9 +1,11 @@
-﻿"use client";
+"use client";
 
+import Image from "next/image";
 import { useState } from "react";
 
 import type { Profile } from "@/lib/types";
 
+import styles from "./entity-avatar.module.css";
 
 const SIZES: Record<"small" | "medium" | "large", number> = {
   small: 32,
@@ -17,6 +19,12 @@ type EntityAvatarProps = {
   decorative?: boolean;
 };
 
+type ImageState = {
+  source: string;
+  loading: boolean;
+  failed: boolean;
+};
+
 function initials(name: string): string {
   const parts = name.trim().split(/\s+/);
   if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
@@ -24,11 +32,19 @@ function initials(name: string): string {
 }
 
 export function EntityAvatar({ entity, size, decorative = false }: EntityAvatarProps) {
-  const [failed, setFailed] = useState(false);
   const px = SIZES[size];
-  const mono = initials(entity.name);
   const imageUrl = entity.visual.image_url;
+  const source = `${entity.id}\u0000${imageUrl ?? ""}`;
+  const [imageState, setImageState] = useState<ImageState>(() => ({
+    source,
+    loading: Boolean(imageUrl),
+    failed: false,
+  }));
+  const sourceChanged = imageState.source !== source;
+  const failed = !sourceChanged && imageState.failed;
+  const loading = Boolean(imageUrl) && (sourceChanged || imageState.loading);
   const showImage = Boolean(imageUrl) && !failed;
+  const mono = initials(entity.name);
 
   const frameStyle: React.CSSProperties = {
     display: "inline-flex",
@@ -43,44 +59,38 @@ export function EntityAvatar({ entity, size, decorative = false }: EntityAvatarP
     position: "relative",
   };
 
-  if (decorative) {
-    return (
-      <span style={frameStyle} aria-hidden="true">
-        {!showImage && (
-          <span style={{ fontSize: px * 0.35, fontWeight: 650, color: "var(--muted-ink, #6f716c)", lineHeight: 1 }}>
-            {mono}
-          </span>
-        )}
-        {showImage && (
-          <img
-            src={imageUrl!}
-            alt=""
-            width={px}
-            height={px}
-            style={{ width: "100%", height: "100%", objectFit: "cover" }}
-            onError={() => setFailed(true)}
-          />
-        )}
-      </span>
-    );
+  const fallbackProps = decorative
+    ? { "aria-hidden": true }
+    : !showImage
+      ? { "aria-label": entity.name }
+      : {};
+
+  function markLoaded() {
+    setImageState({ source, loading: false, failed: false });
+  }
+
+  function markFailed() {
+    setImageState({ source, loading: false, failed: true });
   }
 
   return (
-    <span style={frameStyle} aria-label={entity.name}>
+    <span style={frameStyle} {...fallbackProps}>
       {showImage ? (
-        <img
-          src={imageUrl!}
-          alt={entity.name}
-          width={px}
-          height={px}
-          style={{ width: "100%", height: "100%", objectFit: "cover" }}
-          onError={() => setFailed(true)}
-        />
+        <span className={styles.media}>
+          <Image
+            key={source}
+            src={imageUrl!}
+            alt={decorative ? "" : entity.name}
+            fill
+            sizes={`${px}px`}
+            className={styles.image}
+            onLoad={markLoaded}
+            onError={markFailed}
+          />
+          {loading && <span aria-hidden="true" className={styles.skeleton} data-testid="avatar-skeleton" />}
+        </span>
       ) : (
-        <span
-          aria-hidden="true"
-          style={{ fontSize: px * 0.35, fontWeight: 650, color: "var(--muted-ink, #6f716c)", lineHeight: 1 }}
-        >
+        <span aria-hidden="true" style={{ fontSize: px * 0.35, fontWeight: 650, color: "var(--muted-ink, #6f716c)", lineHeight: 1 }}>
           {mono}
         </span>
       )}

@@ -1,6 +1,7 @@
 ﻿import { afterEach, expect, it, vi } from "vitest";
 
 import { loadComparison, loadFilterOptions, searchHistory } from "./api";
+import type { SearchResponse } from "./types";
 
 
 afterEach(() => vi.unstubAllGlobals());
@@ -51,4 +52,27 @@ it("loads filter options from the filters endpoint", async () => {
   const url = vi.mocked(fetch).mock.calls[0][0] as string;
   expect(url).toContain("/api/players/filters");
   expect(result.seasons).toEqual([2023]);
+});
+
+it("preserves enriched search profiles from the accepted API contract", async () => {
+  const response: SearchResponse = {
+    items: [{
+      id: "2544:2023",
+      name: "LeBron James",
+      season: "2022-23",
+      kind: "player",
+      teams: [{ code: "LAL", name: "Los Angeles Lakers" }],
+      visual: {
+        kind: "player",
+        nba_id: "2544",
+        image_url: "https://cdn.nba.com/headshots/nba/latest/1040x760/2544.png",
+      },
+    }],
+  };
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify(response))));
+
+  const result = await searchHistory("player", "james", {});
+
+  expect(result.items[0].teams[0].code).toBe("LAL");
+  expect(result.items[0].visual.nba_id).toBe("2544");
 });

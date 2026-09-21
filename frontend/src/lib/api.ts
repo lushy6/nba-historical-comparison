@@ -45,7 +45,7 @@ export function searchHistory(
 export function loadComparison(
   kind: EntityKind,
   profileId: string,
-  scope?: ComparisonScope,
+  scope: ComparisonScope,
   signal?: AbortSignal,
 ): Promise<Comparison> {
   const params = scopeParams(scope);
