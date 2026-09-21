@@ -35,7 +35,7 @@ function isAllowedImageUrl(imageUrl: string | null): imageUrl is string {
   if (!imageUrl) return false;
   try {
     const url = new URL(imageUrl);
-    return url.protocol === "https:" && url.hostname === "cdn.nba.com";
+    return url.origin === "https://cdn.nba.com";
   } catch {
     return false;
   }

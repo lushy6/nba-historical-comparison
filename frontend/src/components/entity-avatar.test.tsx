@@ -62,6 +62,7 @@ it("renders an allowed NBA SVG logo through next/image", () => {
 it.each([
   "https://example.invalid/logo.svg",
   "http://cdn.nba.com/logos/nba/1610612738/primary/L/logo.svg",
+  "https://cdn.nba.com:8443/logos/nba/1610612738/primary/L/logo.svg",
 ])("does not mount an image for an untrusted SVG source: %s", (imageUrl) => {
   render(<EntityAvatar entity={{ ...teamWithNbaSvgLogo, visual: { ...teamWithNbaSvgLogo.visual, image_url: imageUrl } }} size="small" />);
 
