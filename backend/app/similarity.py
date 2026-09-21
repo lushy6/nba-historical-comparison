@@ -99,6 +99,10 @@ class SimilarityEngine:
         kind: Literal["player", "team"],
         limit: int = 15,
     ) -> ComparisonResult:
+        if not isinstance(limit, int) or isinstance(limit, bool) or limit < 1:
+            raise ComparisonError("The comparison result limit must be a positive integer.")
+        limit = min(limit, 15)
+
         selected_rows = frame.loc[frame["profile_id"] == selected_profile_id]
         if selected_rows.empty:
             raise ComparisonError("The requested profile was not found in the resolved dataset.")

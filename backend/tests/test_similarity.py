@@ -150,6 +150,28 @@ def test_similarity_returns_at_most_fifteen_scope_eligible_matches() -> None:
         assert match.advanced_metrics[0].metric == "bpm"
 
 
+def test_similarity_caps_an_oversized_limit_at_fifteen_matches() -> None:
+    result = SimilarityEngine().compare(
+        many_player_rows(18), selected_profile_id="selected:1990",
+        base_features=("points",), advanced_features=(),
+        scope=ComparisonScope(), kind="player", limit=16,
+    )
+
+    assert len(result.matches) == 15
+    assert [match.rank for match in result.matches] == list(range(1, 16))
+    assert result.eligible_count == 18
+
+
+@pytest.mark.parametrize("limit", (0, -1))
+def test_similarity_rejects_a_non_positive_limit(limit: int) -> None:
+    with pytest.raises(ComparisonError, match="limit must be a positive integer"):
+        SimilarityEngine().compare(
+            many_player_rows(2), selected_profile_id="selected:1990",
+            base_features=("points",), advanced_features=(),
+            scope=ComparisonScope(), kind="player", limit=limit,
+        )
+
+
 def test_similarity_reports_no_eligible_alternative_after_scope() -> None:
     with pytest.raises(ComparisonError, match="No eligible historical alternatives"):
         SimilarityEngine().compare(
