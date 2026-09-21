@@ -1,4 +1,4 @@
-import type { Comparison, EntityKind, SearchResponse } from "./types";
+﻿import type { Comparison, ComparisonScope, EntityKind, FilterOptions, SearchResponse } from "./types";
 
 
 const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
@@ -19,10 +19,36 @@ async function request<T>(path: string, signal?: AbortSignal): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-export function searchHistory(kind: EntityKind, query: string, signal?: AbortSignal) {
-  return request<SearchResponse>(`/api/${kind}s/search?q=${encodeURIComponent(query)}`, signal);
+function scopeParams(scope?: ComparisonScope): URLSearchParams {
+  const params = new URLSearchParams();
+  if (scope?.season_from != null) params.set("season_from", String(scope.season_from));
+  if (scope?.season_to != null) params.set("season_to", String(scope.season_to));
+  if (scope?.team) params.set("team", scope.team);
+  return params;
 }
 
-export function loadComparison(kind: EntityKind, profileId: string, signal?: AbortSignal) {
-  return request<Comparison>(`/api/${kind}s/${encodeURIComponent(profileId)}/compare`, signal);
+export function loadFilterOptions(kind: EntityKind, signal?: AbortSignal): Promise<FilterOptions> {
+  return request<FilterOptions>(`/api/${kind}s/filters`, signal);
+}
+
+export function searchHistory(
+  kind: EntityKind,
+  query: string,
+  scope?: ComparisonScope,
+  signal?: AbortSignal,
+): Promise<SearchResponse> {
+  const params = scopeParams(scope);
+  params.set("q", query);
+  return request<SearchResponse>(`/api/${kind}s/search?${params.toString()}`, signal);
+}
+
+export function loadComparison(
+  kind: EntityKind,
+  profileId: string,
+  scope?: ComparisonScope,
+  signal?: AbortSignal,
+): Promise<Comparison> {
+  const params = scopeParams(scope);
+  const query = params.toString() ? `?${params.toString()}` : "";
+  return request<Comparison>(`/api/${kind}s/${encodeURIComponent(profileId)}/compare${query}`, signal);
 }

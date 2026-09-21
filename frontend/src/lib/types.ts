@@ -1,4 +1,4 @@
-export type EntityKind = "player" | "team";
+﻿export type EntityKind = "player" | "team";
 
 export type SearchItem = {
   id: string;
@@ -9,10 +9,23 @@ export type SearchItem = {
 
 export type SearchResponse = { items: SearchItem[] };
 
+export type VisualIdentity = {
+  kind: EntityKind;
+  nba_id: string | null;
+  image_url: string | null;
+};
+
+export type TeamContext = {
+  code: string;
+  name: string;
+};
+
 export type Profile = {
   id: string;
   name: string;
   season: string;
+  teams: TeamContext[];
+  visual: VisualIdentity;
 };
 
 export type ComparisonMetric = {
@@ -24,14 +37,50 @@ export type ComparisonMetric = {
   match_normalized: number;
 };
 
-type ComparisonBase = {
-  selected: Profile;
-  match: Profile;
+export type MetricGroups = {
+  basic: ComparisonMetric[];
+  advanced: ComparisonMetric[];
+};
+
+export type PowerRanking = {
+  rank: number;
+  tier: string;
+};
+
+export type RankedMatch = {
+  profile: Profile;
   similarity_score: number;
-  power_ranking: { rank: number; tier: string };
+  power_ranking: PowerRanking;
+  metrics: MetricGroups;
+};
+
+export type ComparisonScope = {
+  season_from?: number;
+  season_to?: number;
+  team?: string;
+};
+
+export type AppliedScope = {
+  season_from: number | null;
+  season_to: number | null;
+  team: string | null;
+  eligible_count: number;
+};
+
+export type FilterOptions = {
+  seasons: number[];
+  teams: TeamContext[];
+  team_filter_available: boolean;
+};
+
+export type Comparison = {
+  selected: Profile;
+  match: RankedMatch;
+  matches: RankedMatch[];
+  scope: AppliedScope;
   features_used: string[];
 };
 
-export type PlayerComparison = ComparisonBase & { radar: ComparisonMetric[] };
-export type TeamComparison = ComparisonBase & { metrics: ComparisonMetric[] };
-export type Comparison = PlayerComparison | TeamComparison;
+// Legacy aliases kept for backward compatibility
+export type PlayerComparison = Comparison;
+export type TeamComparison = Comparison;
