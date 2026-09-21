@@ -17,6 +17,7 @@ frontend/*.tsbuildinfo
 nba.sqlite
 *.sqlite-journal
 *.sqlite-wal
+.worktrees/
 .env
 .env.*
 !.env.example
