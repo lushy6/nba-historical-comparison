@@ -68,3 +68,22 @@ def test_missing_optional_database_has_no_cached_index(tmp_path: Path) -> None:
     catalog = DatasetCatalog(tmp_path / "identity.sqlite")
 
     assert identity_index_for(catalog) is None
+
+
+def test_identity_index_returns_none_when_database_disappears_before_stat(
+    tmp_path: Path, monkeypatch
+) -> None:
+    path = tmp_path / "identity.sqlite"
+    path.write_text("optional database")
+    catalog = DatasetCatalog(path)
+    original_is_file = Path.is_file
+
+    def delete_after_existence_check(candidate: Path) -> bool:
+        if candidate == path:
+            candidate.unlink()
+            return True
+        return original_is_file(candidate)
+
+    monkeypatch.setattr(Path, "is_file", delete_after_existence_check)
+
+    assert identity_index_for(catalog) is None
