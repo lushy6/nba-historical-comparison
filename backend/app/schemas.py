@@ -8,17 +8,6 @@ from typing import Any, ClassVar, Literal
 from pydantic import BaseModel, Field, model_validator
 
 
-class SearchItem(BaseModel):
-    id: str
-    name: str
-    season: str
-    kind: str
-
-
-class SearchResponse(BaseModel):
-    items: list[SearchItem] = Field(default_factory=list)
-
-
 class VisualIdentity(BaseModel):
     kind: Literal["player", "team"]
     nba_id: str | None = None
@@ -44,6 +33,14 @@ class ProfileResponse(BaseModel):
     visual: VisualIdentity = Field(
         default_factory=lambda: VisualIdentity(kind="player")
     )
+
+
+class SearchItem(ProfileResponse):
+    kind: Literal["player", "team"]
+
+
+class SearchResponse(BaseModel):
+    items: list[SearchItem] = Field(default_factory=list)
 
 
 class PowerRanking(BaseModel):

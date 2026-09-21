@@ -110,19 +110,17 @@ TeamScope = Annotated[ComparisonScope, Depends(_build_team_scope)]
 @app.get("/api/players/filters", response_model=FilterOptionsResponse)
 def player_filters() -> FilterOptionsResponse:
     try:
-        resolved = _season_frame("player")
+        return _filter_metadata("player")
     except SchemaResolutionError as error:
         raise HTTPException(status_code=503, detail=str(error)) from error
-    return _filter_options(resolved.frame, kind="player")
 
 
 @app.get("/api/teams/filters", response_model=FilterOptionsResponse)
 def team_filters() -> FilterOptionsResponse:
     try:
-        resolved = _season_frame("team")
+        return _filter_metadata("team")
     except SchemaResolutionError as error:
         raise HTTPException(status_code=503, detail=str(error)) from error
-    return _filter_options(resolved.frame, kind="team")
 
 
 # ---------------------------------------------------------------------------
@@ -177,6 +175,19 @@ def _cached_season_frame(kind: EntityKind, source_signature: tuple[str, ...]):
     return resolver.resolve_team_seasons()
 
 
+def _filter_metadata(kind: EntityKind) -> FilterOptionsResponse:
+    catalog = DatasetCatalog.from_environment()
+    return _cached_filter_options(kind, catalog.source_signature())
+
+
+@lru_cache(maxsize=8)
+def _cached_filter_options(
+    kind: EntityKind, source_signature: tuple[str, ...]
+) -> FilterOptionsResponse:
+    resolved = _cached_season_frame(kind, source_signature)
+    return _filter_options(resolved.frame, kind=kind)
+
+
 def _filter_options(frame: pd.DataFrame, *, kind: EntityKind) -> FilterOptionsResponse:
     seasons = _season_options(frame)
     if kind != "player":
@@ -222,16 +233,15 @@ def _search(query: str, kind: EntityKind, scope: ComparisonScope) -> SearchRespo
     matches = scoped.loc[
         scoped["name"].map(_searchable_text).str.contains(normalized_query, na=False, regex=False)
     ].head(12)
+    index = identity_index_for(DatasetCatalog.from_environment())
 
     return SearchResponse(
         items=[
             SearchItem(
-                id=str(row.profile_id),
-                name=str(row.name),
-                season=str(row.season),
+                **_profile_payload(SimilarityEngine._profile(row), kind, index).model_dump(),
                 kind=kind,
             )
-            for row in matches.itertuples(index=False)
+            for _, row in matches.iterrows()
         ]
     )
 
