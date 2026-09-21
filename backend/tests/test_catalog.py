@@ -36,3 +36,16 @@ def test_catalog_discovers_tables_and_columns_from_sqlite_metadata(tmp_path: Pat
     assert [table.name for table in report.tables] == ["Players", "Team_Stats"]
     assert report.tables[0].columns == ("PERSON_ID", "PLAYER_NAME", "FROM_YEAR")
     assert report.tables[1].columns == ("TEAM_ID", "SEASON_ID", "PTS")
+
+
+def test_catalog_signature_prefers_the_configured_historical_csv_source(tmp_path: Path) -> None:
+    historical_directory = tmp_path / "historical"
+    historical_directory.mkdir()
+    (historical_directory / "Player Totals.csv").write_text("season,player\n2023,Aster Guard\n")
+
+    signature = DatasetCatalog(
+        tmp_path / "missing.sqlite", historical_data_path=historical_directory
+    ).source_signature()
+
+    assert signature[0] == "historical_csv"
+    assert signature[1] == str(historical_directory.resolve())

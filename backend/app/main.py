@@ -1,4 +1,6 @@
+from functools import lru_cache
 from typing import Annotated, Literal
+from unicodedata import combining, normalize
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
@@ -52,7 +54,7 @@ def search_teams(q: SearchQuery) -> SearchResponse:
 @app.get("/api/players/{profile_id}/compare", response_model=PlayerComparisonResponse)
 def compare_player(profile_id: str) -> PlayerComparisonResponse:
     try:
-        resolved = _resolver().resolve_player_seasons()
+        resolved = _season_frame("player")
         result = SimilarityEngine().compare(
             resolved.frame,
             selected_profile_id=profile_id,
@@ -72,7 +74,7 @@ def compare_player(profile_id: str) -> PlayerComparisonResponse:
 @app.get("/api/teams/{profile_id}/compare", response_model=TeamComparisonResponse)
 def compare_team(profile_id: str) -> TeamComparisonResponse:
     try:
-        resolved = _resolver().resolve_team_seasons()
+        resolved = _season_frame("team")
         result = SimilarityEngine().compare(
             resolved.frame,
             selected_profile_id=profile_id,
@@ -93,18 +95,30 @@ def _resolver() -> SchemaResolver:
     return SchemaResolver(DatasetCatalog.from_environment())
 
 
+def _season_frame(kind: Literal["player", "team"]):
+    catalog = DatasetCatalog.from_environment()
+    return _cached_season_frame(kind, catalog.source_signature())
+
+
+@lru_cache(maxsize=8)
+def _cached_season_frame(kind: Literal["player", "team"], source_signature: tuple[str, ...]):
+    resolver = _resolver()
+    if kind == "player":
+        return resolver.resolve_player_seasons()
+    return resolver.resolve_team_seasons()
+
+
 def _search(query: str, kind: Literal["player", "team"]) -> SearchResponse:
     try:
-        resolved = (
-            _resolver().resolve_player_seasons()
-            if kind == "player"
-            else _resolver().resolve_team_seasons()
-        )
+        resolved = _season_frame(kind)
     except SchemaResolutionError as error:
         raise HTTPException(status_code=503, detail=str(error)) from error
 
+    normalized_query = _searchable_text(query)
     matches = resolved.frame.loc[
-        resolved.frame["name"].str.contains(query, case=False, na=False, regex=False)
+        resolved.frame["name"].map(_searchable_text).str.contains(
+            normalized_query, na=False, regex=False
+        )
     ].head(12)
     return SearchResponse(
         items=[
@@ -146,3 +160,11 @@ def _metric_payload(point) -> dict[str, object]:
         "selected_normalized": point.selected_normalized,
         "match_normalized": point.match_normalized,
     }
+
+
+def _searchable_text(value: object) -> str:
+    return "".join(
+        character
+        for character in normalize("NFKD", str(value))
+        if not combining(character)
+    ).casefold()

@@ -52,6 +52,7 @@ def test_player_search_and_comparison_return_typed_visual_data(
     database_path = tmp_path / "nba.sqlite"
     seed_database(database_path)
     monkeypatch.setenv("NBA_DATABASE_PATH", str(database_path))
+    monkeypatch.setenv("NBA_HISTORICAL_DATA_PATH", str(tmp_path / "not-present"))
 
     search_response = asyncio.run(get("/api/players/search?q=aster"))
     comparison_response = asyncio.run(get("/api/players/7:2022-23/compare"))
@@ -74,6 +75,7 @@ def test_team_search_and_comparison_return_four_factor_metrics(
     database_path = tmp_path / "nba.sqlite"
     seed_database(database_path)
     monkeypatch.setenv("NBA_DATABASE_PATH", str(database_path))
+    monkeypatch.setenv("NBA_HISTORICAL_DATA_PATH", str(tmp_path / "not-present"))
 
     search_response = asyncio.run(get("/api/teams/search?q=harbor"))
     comparison_response = asyncio.run(get("/api/teams/1:2022-23/compare"))

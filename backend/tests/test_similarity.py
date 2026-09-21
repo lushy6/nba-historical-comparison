@@ -63,3 +63,24 @@ def test_similarity_rejects_a_selection_without_another_complete_candidate() -> 
             base_features=PLAYER_BASE_METRICS,
             advanced_features=(),
         )
+
+
+def test_similarity_excludes_unrecorded_era_metrics_without_imputing_zeroes() -> None:
+    frame = pd.DataFrame(
+        [
+            {"profile_id": "old:1950", "name": "Old Star", "season": "1950", "points": 1300, "three_point_attempts": None},
+            {"profile_id": "peer:1951", "name": "Old Peer", "season": "1951", "points": 1280, "three_point_attempts": None},
+            {"profile_id": "modern:2023", "name": "Modern Guard", "season": "2023", "points": 500, "three_point_attempts": 600},
+        ]
+    )
+
+    result = SimilarityEngine().compare(
+        frame,
+        selected_profile_id="old:1950",
+        base_features=("points", "three_point_attempts"),
+        advanced_features=(),
+    )
+
+    assert result.match.profile_id == "peer:1951"
+    assert result.features_used == ("points",)
+    assert [point.metric for point in result.radar] == ["points"]

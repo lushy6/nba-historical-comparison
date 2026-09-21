@@ -83,12 +83,20 @@ class SimilarityEngine:
                 + "."
             )
 
+        usable_base = tuple(
+            feature
+            for feature in base_features
+            if pd.notna(selected[feature])
+        )
+        if not usable_base:
+            raise ComparisonError("The requested profile has no recorded base measures to compare.")
+
         usable_advanced = tuple(
             feature
             for feature in advanced_features
             if feature in frame.columns and pd.notna(selected[feature])
         )
-        features = tuple((*base_features, *usable_advanced))
+        features = tuple((*usable_base, *usable_advanced))
         complete_profiles = frame.dropna(subset=list(features)).copy()
         complete_profiles = complete_profiles.drop_duplicates(subset=["profile_id"], keep="first")
 
@@ -131,7 +139,7 @@ class SimilarityEngine:
                 complete_profiles,
                 selected,
                 match,
-                tuple(base_features),
+                usable_base,
             ),
         )
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from pathlib import Path
 
 import pandas as pd
 
@@ -74,6 +75,14 @@ METRIC_ALIASES: dict[str, tuple[str, ...]] = {
 
 PLAYER_ADVANCED_METRICS = ("ts_pct", "efg_pct", "usg_pct", "per", "win_shares", "bpm", "vorp", "pace")
 
+HISTORICAL_PLAYER_TOTALS = "Player Totals.csv"
+HISTORICAL_PLAYER_ADVANCED = "Advanced.csv"
+HISTORICAL_PLAYER_PER_GAME = "Player Per Game.csv"
+HISTORICAL_TEAM_SUMMARIES = "Team Summaries.csv"
+
+HISTORICAL_PLAYER_KEY = ("season", "lg", "player_id", "team")
+HISTORICAL_LEAGUES = {"NBA", "BAA"}
+
 
 class SchemaResolutionError(RuntimeError):
     """Raised when the supplied dataset cannot satisfy an analytical contract."""
@@ -98,6 +107,8 @@ class SchemaResolver:
     def resolve_player_seasons(self) -> ResolvedSeasonFrame:
         report = self.catalog.inspect()
         self._require_ready_catalog(report)
+        if report.source_format == "historical_csv":
+            return self._resolve_historical_csv_player_seasons()
         source_table = self._find_player_stats_table(report)
         source_columns = self._column_mapping(source_table)
         source_frame = self._load_table(source_table, source_columns)
@@ -128,6 +139,8 @@ class SchemaResolver:
     def resolve_team_seasons(self) -> ResolvedSeasonFrame:
         report = self.catalog.inspect()
         self._require_ready_catalog(report)
+        if report.source_format == "historical_csv":
+            return self._resolve_historical_csv_team_seasons()
         source_table = self._find_team_stats_table(report)
         source_frame = self._load_table(source_table, self._column_mapping(source_table))
 
@@ -150,9 +163,225 @@ class SchemaResolver:
             advanced_features=(),
         )
 
+    def _resolve_historical_csv_player_seasons(self) -> ResolvedSeasonFrame:
+        totals = self._load_historical_csv(
+            HISTORICAL_PLAYER_TOTALS,
+            (
+                *HISTORICAL_PLAYER_KEY,
+                "player",
+                "fg",
+                "fga",
+                "x3p",
+                "x3pa",
+                "ft",
+                "fta",
+                "trb",
+                "ast",
+                "stl",
+                "blk",
+                "tov",
+                "pts",
+            ),
+        ).rename(
+            columns={
+                "player": "player_name",
+                "x3pa": "three_point_attempts",
+                "x3p": "three_point_made",
+                "fga": "field_goal_attempts",
+                "fg": "field_goals_made",
+                "pts": "points",
+                "blk": "blocks",
+                "tov": "turnovers",
+                "stl": "steals",
+                "ast": "assists",
+                "trb": "rebounds",
+                "fta": "free_throw_attempts",
+                "ft": "free_throws_made",
+            }
+        )
+        advanced = self._load_historical_csv(
+            HISTORICAL_PLAYER_ADVANCED,
+            (*HISTORICAL_PLAYER_KEY, "mp", "per", "ts_percent", "usg_percent", "ws", "bpm", "vorp"),
+        ).rename(
+            columns={
+                "mp": "advanced_minutes",
+                "ts_percent": "ts_pct",
+                "usg_percent": "usg_pct",
+                "ws": "win_shares",
+            }
+        )
+        per_game = self._load_historical_csv(
+            HISTORICAL_PLAYER_PER_GAME,
+            (*HISTORICAL_PLAYER_KEY, "e_fg_percent"),
+        ).rename(columns={"e_fg_percent": "efg_pct"})
+
+        frame = self._filter_historical_leagues(totals).merge(
+            self._filter_historical_leagues(
+                advanced.loc[
+                    :,
+                    [*HISTORICAL_PLAYER_KEY, "advanced_minutes", "per", "ts_pct", "usg_pct", "win_shares", "bpm", "vorp"],
+                ]
+            ),
+            on=HISTORICAL_PLAYER_KEY,
+            how="left",
+            validate="one_to_one",
+        ).merge(
+            self._filter_historical_leagues(
+                per_game.loc[:, [*HISTORICAL_PLAYER_KEY, "efg_pct"]]
+            ),
+            on=HISTORICAL_PLAYER_KEY,
+            how="left",
+            validate="one_to_one",
+        )
+        normalized = self._collapse_historical_player_rows(frame)
+        advanced_features = tuple(
+            metric
+            for metric in PLAYER_ADVANCED_METRICS
+            if metric in normalized.columns and normalized[metric].notna().any()
+        )
+        return ResolvedSeasonFrame(
+            frame=normalized,
+            source_table="historical_csv:player_season",
+            base_features=PLAYER_BASE_METRICS,
+            advanced_features=advanced_features,
+        )
+
+    def _resolve_historical_csv_team_seasons(self) -> ResolvedSeasonFrame:
+        frame = self._filter_historical_leagues(
+            self._load_historical_csv(
+                HISTORICAL_TEAM_SUMMARIES,
+                (
+                    "season",
+                    "lg",
+                    "team",
+                    "abbreviation",
+                    "e_fg_percent",
+                    "tov_percent",
+                    "orb_percent",
+                    "f_tr",
+                    "o_rtg",
+                    "d_rtg",
+                    "n_rtg",
+                    "pace",
+                ),
+            )
+        ).rename(
+            columns={
+                "team": "team_name",
+                "abbreviation": "team_id",
+                "e_fg_percent": "effective_field_goal_pct",
+                "tov_percent": "turnover_pct",
+                "orb_percent": "offensive_rebound_pct",
+                "f_tr": "free_throw_rate",
+                "o_rtg": "offensive_rating",
+                "d_rtg": "defensive_rating",
+                "n_rtg": "net_rating",
+            }
+        )
+        for metric in TEAM_COMPARISON_METRICS:
+            frame[metric] = pd.to_numeric(frame[metric], errors="coerce")
+        for metric in ("turnover_pct", "offensive_rebound_pct"):
+            frame[metric] = frame[metric].where(frame[metric] <= 1, frame[metric] / 100)
+
+        clean = frame.dropna(subset=["team_id", "team_name", "season"]).copy()
+        clean["team_id"] = clean["team_id"].astype("string")
+        clean["season"] = clean["season"].astype("string")
+        clean = clean.rename(columns={"team_name": "name"})
+        clean.insert(0, "profile_id", clean["team_id"] + ":" + clean["season"])
+        return ResolvedSeasonFrame(
+            frame=clean.loc[:, ["profile_id", "team_id", "season", "name", *TEAM_COMPARISON_METRICS]],
+            source_table="historical_csv:team_season",
+            base_features=TEAM_COMPARISON_METRICS,
+            advanced_features=(),
+        )
+
     def _require_ready_catalog(self, report: CatalogReport) -> None:
         if report.status != "dataset_ready":
             raise SchemaResolutionError(report.message)
+
+    def _load_historical_csv(
+        self, filename: str, required_columns: tuple[str, ...]
+    ) -> pd.DataFrame:
+        directory = self._historical_data_directory()
+        path = directory / filename
+        if not path.is_file():
+            raise SchemaResolutionError(f"Historical CSV source is missing {filename}.")
+        frame = pd.read_csv(path, low_memory=False)
+        missing_columns = [column for column in required_columns if column not in frame.columns]
+        if missing_columns:
+            raise SchemaResolutionError(
+                f"Historical CSV source {filename} is missing " + ", ".join(missing_columns) + "."
+            )
+        return frame
+
+    def _historical_data_directory(self) -> Path:
+        if self.catalog.historical_data_path is None:
+            raise SchemaResolutionError("No historical CSV data directory was configured.")
+        return self.catalog.historical_data_path
+
+    @staticmethod
+    def _filter_historical_leagues(frame: pd.DataFrame) -> pd.DataFrame:
+        return frame.loc[frame["lg"].astype("string").isin(HISTORICAL_LEAGUES)].copy()
+
+    @staticmethod
+    def _collapse_historical_player_rows(frame: pd.DataFrame) -> pd.DataFrame:
+        numeric_columns = [
+            *PLAYER_BASE_METRICS,
+            "advanced_minutes",
+            "per",
+            "ts_pct",
+            "efg_pct",
+            "usg_pct",
+            "win_shares",
+            "bpm",
+            "vorp",
+        ]
+        for column in numeric_columns:
+            frame[column] = pd.to_numeric(frame[column], errors="coerce")
+
+        key_columns = ["season", "lg", "player_id"]
+        total_rows = frame.loc[
+            frame["team"].astype("string").str.upper() == "TOT"
+        ].drop_duplicates(subset=key_columns, keep="first")
+        non_total_rows = frame.loc[
+            frame["team"].astype("string").str.upper() != "TOT"
+        ]
+        non_total_rows = non_total_rows.merge(
+            total_rows.loc[:, key_columns].assign(_has_total=True),
+            on=key_columns,
+            how="left",
+        ).loc[lambda rows: rows["_has_total"].isna()].drop(columns="_has_total")
+        group_size = non_total_rows.groupby(key_columns, dropna=False)["team"].transform("size")
+        single_rows = non_total_rows.loc[group_size == 1]
+
+        combined_rows: list[pd.Series] = []
+        for _, group in non_total_rows.loc[group_size > 1].groupby(
+            key_columns, sort=False, dropna=False
+        ):
+            combined = group.iloc[0].copy()
+            for column in PLAYER_BASE_METRICS:
+                combined[column] = group[column].sum(min_count=1)
+            weights = group["advanced_minutes"].fillna(0)
+            for column in ("per", "ts_pct", "efg_pct", "usg_pct", "bpm"):
+                combined[column] = _weighted_mean(group[column], weights)
+            for column in ("win_shares", "vorp"):
+                combined[column] = group[column].sum(min_count=1)
+            combined_rows.append(combined)
+
+        normalized = pd.concat(
+            [total_rows, single_rows, pd.DataFrame(combined_rows)], ignore_index=True
+        ).dropna(subset=["player_id", "player_name", "season"])
+        normalized["player_id"] = normalized["player_id"].astype("string")
+        normalized["season"] = normalized["season"].astype("string")
+        normalized = normalized.rename(columns={"player_name": "name"})
+        for feature in PLAYER_ADVANCED_METRICS:
+            if feature not in normalized.columns:
+                normalized[feature] = pd.NA
+        normalized.insert(0, "profile_id", normalized["player_id"] + ":" + normalized["season"])
+        return normalized.loc[
+            :,
+            ["profile_id", "player_id", "season", "name", *PLAYER_BASE_METRICS, *PLAYER_ADVANCED_METRICS],
+        ]
 
     def _find_player_stats_table(self, report: CatalogReport) -> CatalogTable:
         required = ("player_id", "season", *PLAYER_BASE_METRICS)
@@ -333,3 +562,10 @@ class SchemaResolver:
 
 def _canonical_identifier(value: str) -> str:
     return re.sub(r"[^a-z0-9]", "", value.casefold())
+
+
+def _weighted_mean(values: pd.Series, weights: pd.Series) -> float:
+    valid = values.notna() & weights.notna() & (weights > 0)
+    if not valid.any():
+        return float("nan")
+    return float((values[valid] * weights[valid]).sum() / weights[valid].sum())
