@@ -144,6 +144,15 @@ class DatasetCatalog:
             )
         return ("missing", str(self.database_path.resolve()))
 
+    def identity_signature(self) -> tuple[str, int | None, int | None]:
+        """Return the optional SQLite file metadata used to invalidate identity caches."""
+
+        database_path = str(self.database_path.resolve())
+        if not self.database_path.is_file():
+            return (database_path, None, None)
+        stat = self.database_path.stat()
+        return (database_path, stat.st_size, stat.st_mtime_ns)
+
     def _has_historical_csv_source(self) -> bool:
         return bool(
             self.historical_data_path
