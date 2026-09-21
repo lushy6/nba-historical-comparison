@@ -3,8 +3,19 @@ import sqlite3
 from pathlib import Path
 
 import httpx
+import pytest
+from pydantic import ValidationError
 
 from app.main import app
+from app.schemas import (
+    AppliedScope,
+    MetricGroups,
+    PlayerComparisonResponse,
+    PowerRanking,
+    ProfileResponse,
+    RankedMatch,
+    VisualIdentity,
+)
 
 
 def seed_database(database_path: Path) -> None:
@@ -44,6 +55,53 @@ async def get(path: str) -> httpx.Response:
     transport = httpx.ASGITransport(app=app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
         return await client.get(path)
+
+
+def _profile(profile_id: str) -> ProfileResponse:
+    return ProfileResponse(
+        id=profile_id,
+        name="Test Player",
+        season="2022-23",
+        visual=VisualIdentity(kind="player"),
+    )
+
+
+def _ranked_match(profile_id: str) -> RankedMatch:
+    return RankedMatch(
+        profile=_profile(profile_id),
+        similarity_score=90,
+        power_ranking=PowerRanking(rank=1, tier="Mirror"),
+        metrics=MetricGroups(),
+    )
+
+
+def _comparison_kwargs(matches: list[RankedMatch]) -> dict[str, object]:
+    return {
+        "selected": _profile("selected:2022-23"),
+        "match": _ranked_match("legacy:2022-23"),
+        "matches": matches,
+        "scope": AppliedScope(eligible_count=len(matches)),
+        "features_used": [],
+    }
+
+
+def test_comparison_response_rejects_empty_or_overlong_match_lists() -> None:
+    with pytest.raises(ValidationError):
+        PlayerComparisonResponse(**_comparison_kwargs([]))
+
+    with pytest.raises(ValidationError):
+        PlayerComparisonResponse(
+            **_comparison_kwargs([_ranked_match(f"match-{index}:2022-23") for index in range(16)])
+        )
+
+
+def test_comparison_response_uses_first_ranked_match_as_compatibility_match() -> None:
+    first = _ranked_match("first:2022-23")
+    response = PlayerComparisonResponse(
+        **_comparison_kwargs([first, _ranked_match("second:2022-23")])
+    )
+
+    assert response.match == first
 
 
 def test_player_search_and_comparison_return_typed_visual_data(

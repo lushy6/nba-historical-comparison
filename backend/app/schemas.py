@@ -91,7 +91,7 @@ class _ComparisonResponse(BaseModel):
 
     selected: ProfileResponse
     match: RankedMatch
-    matches: list[RankedMatch] = Field(default_factory=list)
+    matches: list[RankedMatch] = Field(min_length=1, max_length=15)
     scope: AppliedScope
     features_used: list[str] = Field(default_factory=list)
 
@@ -114,15 +114,14 @@ class _ComparisonResponse(BaseModel):
             payload["match"] = ranked_match
             payload["matches"] = [ranked_match]
             payload["scope"] = {"eligible_count": 1}
-        elif payload.get("matches") and legacy_match is None:
+        elif payload.get("matches"):
             payload["match"] = payload["matches"][0]
 
         return payload
 
     @model_validator(mode="after")
     def _make_first_match_compatible(self) -> _ComparisonResponse:
-        if self.matches:
-            self.match = self.matches[0]
+        self.match = self.matches[0]
         _set_profile_kind(self.selected, self.entity_kind)
         for ranked_match in self.matches:
             _set_profile_kind(ranked_match.profile, self.entity_kind)
