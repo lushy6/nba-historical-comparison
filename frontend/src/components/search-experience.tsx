@@ -1,37 +1,55 @@
-"use client";
+﻿"use client";
 
 import * as Popover from "@radix-ui/react-popover";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
-import { ApiError, loadComparison, searchHistory } from "@/lib/api";
-import type { Comparison, EntityKind, SearchItem } from "@/lib/types";
+import { ApiError, loadComparison, loadFilterOptions, searchHistory } from "@/lib/api";
+import type { Comparison, ComparisonScope, EntityKind, FilterOptions, SearchItem } from "@/lib/types";
 
 import { ComparisonDashboard } from "./comparison-dashboard";
+import { ComparisonFilters } from "./comparison-filters";
 
 
 export function SearchExperience() {
   const reducedMotion = useReducedMotion();
   const [kind, setKind] = useState<EntityKind>("player");
   const [query, setQuery] = useState("");
+  const [scope, setScope] = useState<ComparisonScope>({});
   const [items, setItems] = useState<SearchItem[]>([]);
+  const [filterOptions, setFilterOptions] = useState<FilterOptions | null>(null);
   const [isSearching, setIsSearching] = useState(false);
   const [isLoadingComparison, setIsLoadingComparison] = useState(false);
   const [comparison, setComparison] = useState<Comparison | null>(null);
+  const [activeMatchId, setActiveMatchId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const visibleItems = query.trim().length >= 2 ? items : [];
 
+  // Load filter options whenever kind changes
+  useEffect(() => {
+    const controller = new AbortController();
+    loadFilterOptions(kind, controller.signal)
+      .then((opts) => {
+        setFilterOptions(opts);
+      })
+      .catch((err: unknown) => {
+        if ((err as Error).name !== "AbortError") {
+          setFilterOptions({ seasons: [], teams: [], team_filter_available: false });
+        }
+      });
+    return () => controller.abort();
+  }, [kind]);
+
+  // Search with debounce, including scope
   useEffect(() => {
     const trimmedQuery = query.trim();
-    if (trimmedQuery.length < 2) {
-      return;
-    }
+    if (trimmedQuery.length < 2) return;
 
     const controller = new AbortController();
     const timer = window.setTimeout(() => {
       setIsSearching(true);
       setError(null);
-      searchHistory(kind, trimmedQuery, controller.signal)
+      searchHistory(kind, trimmedQuery, scope, controller.signal)
         .then((response) => setItems(response.items))
         .catch((requestError: unknown) => {
           if ((requestError as Error).name !== "AbortError") {
@@ -46,28 +64,38 @@ export function SearchExperience() {
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [kind, query]);
+  }, [kind, query, scope]);
 
-  async function selectItem(item: SearchItem) {
+  const selectItem = useCallback(async (item: SearchItem) => {
     setItems([]);
     setError(null);
     setIsLoadingComparison(true);
     try {
-      setComparison(await loadComparison(item.kind, item.id));
+      const result = await loadComparison(item.kind, item.id, scope);
+      setComparison(result);
+      setActiveMatchId(result.matches[0]?.profile.id ?? null);
     } catch (requestError) {
       setComparison(null);
+      setActiveMatchId(null);
       setError(messageForError(requestError));
     } finally {
       setIsLoadingComparison(false);
     }
-  }
+  }, [scope]);
 
   function switchKind(nextKind: EntityKind) {
     setKind(nextKind);
+    setScope({});
+    setFilterOptions(null);
     setComparison(null);
+    setActiveMatchId(null);
     setItems([]);
     setQuery("");
     setError(null);
+  }
+
+  function handleScopeChange(nextScope: ComparisonScope) {
+    setScope(nextScope);
   }
 
   return (
@@ -84,7 +112,7 @@ export function SearchExperience() {
         <p className="eyebrow">A different kind of comparison</p>
         <h1 id="page-title">Find the season that echoes today.</h1>
         <p className="hero-copy">
-          Search a player or a team. We trace the statistical shape of their season through NBA history—pace, efficiency, volume, and the details in between.
+          Search a player or a team. We trace the statistical shape of their season through NBA history-pace, efficiency, volume, and the details in between.
         </p>
 
         <div className="mode-switch" role="group" aria-label="Comparison type">
@@ -145,6 +173,15 @@ export function SearchExperience() {
             </Popover.Content>
           </Popover.Portal>
         </Popover.Root>
+
+        <ComparisonFilters
+          kind={kind}
+          value={scope}
+          options={filterOptions}
+          onChange={handleScopeChange}
+          disabled={isLoadingComparison}
+        />
+
         <p className="search-caption">Powered by your local NBA historical database. No scores are guessed.</p>
 
         <AnimatePresence mode="wait">
@@ -152,8 +189,14 @@ export function SearchExperience() {
             <LoadingResult key="loading" reducedMotion={Boolean(reducedMotion)} />
           ) : error ? (
             <ErrorResult key="error" message={error} />
-          ) : comparison ? (
-            <ComparisonDashboard key={comparison.selected.id} comparison={comparison} kind={kind} />
+          ) : comparison && activeMatchId ? (
+            <ComparisonDashboard
+              key={comparison.selected.id}
+              comparison={comparison}
+              kind={kind}
+              activeMatchId={activeMatchId}
+              onActiveMatchChange={setActiveMatchId}
+            />
           ) : null}
         </AnimatePresence>
       </section>
@@ -176,7 +219,7 @@ function LoadingResult({ reducedMotion }: { reducedMotion: boolean }) {
       exit={{ opacity: 0 }}
       transition={{ duration: 0.18, ease: [0.23, 1, 0.32, 1] }}
     >
-      Measuring the historical shape…
+      Measuring the historical shape.
     </motion.div>
   );
 }
