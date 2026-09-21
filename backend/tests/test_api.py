@@ -63,10 +63,13 @@ def test_player_search_and_comparison_return_typed_visual_data(
     ]
     comparison = comparison_response.json()
     assert comparison_response.status_code == 200
-    assert comparison["match"]["id"] == "11:2015-16"
-    assert 0 <= comparison["similarity_score"] <= 100
-    assert comparison["power_ranking"]["tier"] == "Mirror"
-    assert len(comparison["radar"]) == 12
+    match = comparison["matches"][0]
+    assert comparison["match"] == match
+    assert match["profile"]["id"] == "11:2015-16"
+    assert 0 <= match["similarity_score"] <= 100
+    assert match["power_ranking"]["tier"] == "Mirror"
+    assert comparison["scope"]["eligible_count"] >= 1
+    assert len(match["metrics"]["basic"]) == 12
 
 
 def test_team_search_and_comparison_return_four_factor_metrics(
@@ -84,5 +87,8 @@ def test_team_search_and_comparison_return_four_factor_metrics(
     assert search_response.json()["items"][0]["name"] == "Harbor Pilots"
     comparison = comparison_response.json()
     assert comparison_response.status_code == 200
-    assert comparison["match"]["id"] == "2:2015-16"
-    assert comparison["metrics"][0]["metric"] == "effective_field_goal_pct"
+    match = comparison["matches"][0]
+    assert comparison["match"] == match
+    assert match["profile"]["id"] == "2:2015-16"
+    assert comparison["scope"]["eligible_count"] >= 1
+    assert match["metrics"]["basic"][0]["metric"] == "effective_field_goal_pct"
