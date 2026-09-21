@@ -35,11 +35,39 @@ const teamWithoutImage: Profile = {
   visual: { kind: "team", nba_id: null, image_url: null },
 };
 
+const teamWithNbaSvgLogo: Profile = {
+  ...teamWithoutImage,
+  visual: {
+    kind: "team",
+    nba_id: "1610612738",
+    image_url: "https://cdn.nba.com/logos/nba/1610612738/primary/L/logo.svg",
+  },
+};
+
 it("renders an image when image_url is present", () => {
   render(<EntityAvatar entity={playerWithImage} size="medium" />);
   const image = screen.getByRole("img", { name: /LeBron James/i });
   expect(image).toHaveAttribute("data-fill", "true");
   expect(image).toHaveAttribute("sizes", "48px");
+});
+
+it("renders an allowed NBA SVG logo through next/image", () => {
+  render(<EntityAvatar entity={teamWithNbaSvgLogo} size="small" />);
+
+  const image = screen.getByRole("img", { name: /Boston Celtics/i });
+  expect(image).toHaveAttribute("src", expect.stringContaining("cdn.nba.com/logos/nba/1610612738"));
+  expect(image).toHaveAttribute("data-fill", "true");
+});
+
+it.each([
+  "https://example.invalid/logo.svg",
+  "http://cdn.nba.com/logos/nba/1610612738/primary/L/logo.svg",
+])("does not mount an image for an untrusted SVG source: %s", (imageUrl) => {
+  render(<EntityAvatar entity={{ ...teamWithNbaSvgLogo, visual: { ...teamWithNbaSvgLogo.visual, image_url: imageUrl } }} size="small" />);
+
+  expect(screen.getByText("BC")).toBeInTheDocument();
+  expect(screen.queryByRole("img")).not.toBeInTheDocument();
+  expect(screen.queryByTestId("avatar-skeleton")).not.toBeInTheDocument();
 });
 
 it("keeps a fixed skeleton until the remote image finishes loading", () => {

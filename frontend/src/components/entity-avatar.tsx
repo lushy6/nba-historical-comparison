@@ -31,9 +31,19 @@ function initials(name: string): string {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
+function isAllowedImageUrl(imageUrl: string | null): imageUrl is string {
+  if (!imageUrl) return false;
+  try {
+    const url = new URL(imageUrl);
+    return url.protocol === "https:" && url.hostname === "cdn.nba.com";
+  } catch {
+    return false;
+  }
+}
+
 export function EntityAvatar({ entity, size, decorative = false }: EntityAvatarProps) {
   const px = SIZES[size];
-  const imageUrl = entity.visual.image_url;
+  const imageUrl = isAllowedImageUrl(entity.visual.image_url) ? entity.visual.image_url : null;
   const source = `${entity.id}\u0000${imageUrl ?? ""}`;
   const [imageState, setImageState] = useState<ImageState>(() => ({
     source,
