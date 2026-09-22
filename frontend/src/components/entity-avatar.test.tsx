@@ -6,9 +6,10 @@ import { EntityAvatar } from "./entity-avatar";
 import type { Profile } from "@/lib/types";
 
 vi.mock("next/image", () => ({
-  default: ({ fill, ...props }: ImgHTMLAttributes<HTMLImageElement> & { fill?: boolean }) => (
-    <img {...props} data-fill={String(fill)} />
-  ),
+  default: ({ fill, alt, ...props }: ImgHTMLAttributes<HTMLImageElement> & { fill?: boolean }) => {
+    // eslint-disable-next-line @next/next/no-img-element
+    return <img {...props} alt={alt ?? ""} data-fill={String(fill)} />;
+  },
 }));
 
 const playerWithImage: Profile = {

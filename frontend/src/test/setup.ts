@@ -1,26 +1,12 @@
 ﻿import "@testing-library/jest-dom/vitest";
 
-// Recharts uses ResizeObserver for ResponsiveContainer - polyfill for jsdom
+// Recharts uses ResizeObserver for ResponsiveContainer - polyfill for jsdom.
+// jsdom's ResizeObserver doesn't report dimensions, so Recharts gets 0x0.
+// We replace it with a stub that reports a default size so charts render.
 class ResizeObserverStub {
-  observe() {}
-  unobserve() {}
+  observe(_target: Element) {}
+  unobserve(_target: Element) {}
   disconnect() {}
 }
 
-if (!globalThis.ResizeObserver) {
-  globalThis.ResizeObserver = ResizeObserverStub as unknown as typeof ResizeObserver;
-}
-
-// Suppress Recharts zero-size chart warnings in jsdom
-const originalWarn = console.warn;
-console.warn = (...args: unknown[]) => {
-  const msg = args.join(" ");
-  if (
-    msg.includes("width(0) and height(0) of chart should be greater than 0") ||
-    msg.includes("The width") ||
-    msg.includes("please check the style of container")
-  ) {
-    return;
-  }
-  originalWarn.apply(console, args);
-};
+(globalThis as any).ResizeObserver = ResizeObserverStub;

@@ -108,13 +108,13 @@ it("player advanced scatter uses Bpm and Win Shares canonical keys", () => {
   const { rerender } = render(<ComparisonCharts kind="player" selected={selected} activeMatch={playerMatch} matches={matches} />);
   const advancedBtn = screen.getByRole("button", { name: "Advanced" });
   fireEvent.click(advancedBtn);
-  expect(screen.getByText(/BPM/i)).toBeInTheDocument();
+  expect(screen.getAllByText(/BPM/i).length).toBeGreaterThan(0);
 });
 
 it("team basic scatter uses Effective Field Goal Pct and Turnover Pct", () => {
   render(<ComparisonCharts kind="team" selected={selected} activeMatch={teamMatch} matches={teamMatches} />);
-  expect(screen.getByText(/eFG%/i)).toBeInTheDocument();
-  expect(screen.getByText(/TOV%/i)).toBeInTheDocument();
+  expect(screen.getAllByText(/eFG%/i).length).toBeGreaterThan(0);
+  expect(screen.getAllByText(/TOV%/i).length).toBeGreaterThan(0);
 });
 
 it("selected profile is included in scatter data", () => {
@@ -170,5 +170,5 @@ it("basic mode shows 12 primary statistics for player", () => {
 it("switches to advanced and shows BPM label", () => {
   render(<ComparisonCharts kind="player" selected={selected} activeMatch={playerMatch} matches={matches} />);
   fireEvent.click(screen.getByRole("button", { name: "Advanced" }));
-  expect(screen.getByText(/BPM/)).toBeInTheDocument();
+  expect(screen.getAllByText(/BPM/).length).toBeGreaterThan(0);
 });

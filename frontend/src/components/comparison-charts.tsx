@@ -9,7 +9,6 @@ import {
   PolarGrid,
   Radar,
   RadarChart,
-  ResponsiveContainer,
   Scatter,
   ScatterChart,
   Tooltip,
@@ -246,23 +245,20 @@ function ComparisonChartsContent({ kind, selected, activeMatch, matches }: Compa
               </div>
             </div>
             <div className="radar-wrap" role="img" aria-label={radarLabel}>
-              <ResponsiveContainer width="100%" height="100%">
-                <RadarChart data={radarData} outerRadius="67%">
+                <RadarChart data={radarData} outerRadius="67%" width={400} height={384}>
                   <PolarGrid stroke="#dedfd9" />
                   <PolarAngleAxis dataKey="label" tick={{ fill: "#6f716c", fontSize: 10 }} />
                   <Tooltip isAnimationActive={false} contentStyle={{ border: "1px solid #dedfd9", borderRadius: 8, boxShadow: "0 8px 24px rgba(23,24,23,.08)" }} formatter={(value: unknown, key: unknown, item: { payload?: { selectedRaw?: number; matchRaw?: number } }) => [Number(key === "selected" ? item.payload?.selectedRaw : item.payload?.matchRaw).toFixed(1), key === "selected" ? selectedName : matchName]} />
                   <Radar dataKey="selected" stroke="#e75024" fill="#e75024" fillOpacity={0.15} strokeWidth={2} isAnimationActive animationDuration={220} />
                   <Radar dataKey="match" stroke="#171817" fill="#171817" fillOpacity={0.05} strokeWidth={1.5} isAnimationActive animationDuration={220} />
                 </RadarChart>
-              </ResponsiveContainer>
-            </div>
+              </div>
           </article>
 
           <article className="comparison-card delta-card">
             <p className="card-kicker">Delta vs. {matchName}</p>
             <div className="chart-wrap">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={deltaData} layout="vertical" margin={{ left: 40, right: 16, top: 8, bottom: 8 }}>
+                <BarChart data={deltaData} layout="vertical" margin={{ left: 40, right: 16, top: 8, bottom: 8 }} width={400} height={384}>
                   <XAxis type="number" domain={[-100, 100]} tick={{ fontSize: 10, fill: "#6f716c" }} />
                   <YAxis type="category" dataKey="label" width={60} tick={{ fontSize: 10, fill: "#6f716c" }} />
                   <Tooltip isAnimationActive={false} formatter={(value: unknown) => [`${Number(value).toFixed(1)} pts`, "Delta"]} contentStyle={{ border: "1px solid #dedfd9", borderRadius: 8 }} />
@@ -272,21 +268,19 @@ function ComparisonChartsContent({ kind, selected, activeMatch, matches }: Compa
                     ))}
                   </Bar>
                 </BarChart>
-              </ResponsiveContainer>
-            </div>
+              </div>
           </article>
 
           <article className="comparison-card scatter-card">
             <p className="card-kicker">Pool distribution: {xLabel} vs {yLabel}</p>
             <div className="chart-wrap">
-              <ResponsiveContainer width="100%" height="100%">
                 {allUnavailable ? (
                   <div className="chart-unavailable">
                     <p>Neither {selectedName} nor any match has both {xLabel} and {yLabel} values available in {mode} mode.</p>
                     <p style={{ fontSize: "0.75rem", marginTop: "0.5rem", color: "#6f716c" }}>Try Basic mode or adjust the comparison scope to see scatter data.</p>
                   </div>
                 ) : (
-                  <ScatterChart margin={{ top: 8, right: 16, bottom: 8, left: 8 }}>
+                  <ScatterChart margin={{ top: 8, right: 16, bottom: 8, left: 8 }} width={400} height={384}>
                     <XAxis type="number" dataKey="x" name={xLabel} tick={{ fontSize: 10, fill: "#6f716c" }} />
                     <YAxis type="number" dataKey="y" name={yLabel} tick={{ fontSize: 10, fill: "#6f716c" }} />
                     <ZAxis range={[40, 40]} />
@@ -298,8 +292,7 @@ function ComparisonChartsContent({ kind, selected, activeMatch, matches }: Compa
                     </Scatter>
                   </ScatterChart>
                 )}
-              </ResponsiveContainer>
-            </div>
+              </div>
           </article>
         </div>
       )}

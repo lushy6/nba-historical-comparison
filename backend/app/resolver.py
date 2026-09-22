@@ -417,9 +417,33 @@ class SchemaResolver:
                 combined[column] = group[column].sum(min_count=1)
             combined_rows.append(combined)
 
-        normalized = pd.concat(
-            [total_rows, single_rows, pd.DataFrame(combined_rows)], ignore_index=True
-        ).dropna(subset=["player_id", "player_name", "season"])
+        # pandas deprecates concat with empty or all-NA entries whose dtype has
+        # to be negotiated. Exclude empty frames and drop per-frame all-NA filler
+        # columns (kept by the reference frame) so dtypes come from real values.
+        # Output rows and values are identical to the legacy concat behavior.
+        concat_frames = [
+            frame
+            for frame in (total_rows, single_rows, pd.DataFrame(combined_rows))
+            if not frame.empty
+        ]
+        if not concat_frames:
+            concat_frames = [total_rows]
+        reference = max(concat_frames, key=len)
+        aligned_frames: list[pd.DataFrame] = []
+        for frame in concat_frames:
+            if frame is not reference:
+                filler_columns = [
+                    column
+                    for column in frame.columns
+                    if column in reference.columns
+                    and frame[column].isna().all()
+                    and not reference[column].isna().all()
+                ]
+                frame = frame.drop(columns=filler_columns)
+            aligned_frames.append(frame)
+        normalized = pd.concat(aligned_frames, ignore_index=True).dropna(
+            subset=["player_id", "player_name", "season"]
+        )
         normalized = normalized.merge(
             affiliations, on=key_columns, how="left", validate="one_to_one"
         )
@@ -431,7 +455,7 @@ class SchemaResolver:
         normalized = normalized.rename(columns={"player_name": "name"})
         for feature in PLAYER_ADVANCED_METRICS:
             if feature not in normalized.columns:
-                normalized[feature] = pd.NA
+                normalized[feature] = None
         normalized.insert(0, "profile_id", normalized["player_id"] + ":" + normalized["season"])
         return normalized.loc[
             :,
