@@ -174,7 +174,7 @@ class DatasetCatalog:
         except (OSError, UnicodeDecodeError) as error:
             return CatalogReport(
                 status="dataset_unreadable",
-                database_path=str(self.historical_data_path),
+                database_path=self.historical_data_path.name,
                 tables=(),
                 message=f"Historical CSV data could not be inspected: {error}",
                 source_format="historical_csv",
@@ -182,7 +182,7 @@ class DatasetCatalog:
 
         return CatalogReport(
             status="dataset_ready",
-            database_path=str(self.historical_data_path),
+            database_path=self.historical_data_path.name,
             tables=tables,
             message="Historical CSV catalog discovered. Source mappings are validated before comparisons run.",
             source_format="historical_csv",

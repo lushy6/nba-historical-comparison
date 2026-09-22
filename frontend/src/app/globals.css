@@ -523,5 +523,20 @@ h1 {
 @media (prefers-reduced-motion: reduce) {
   .mode-button, .result-option, .leaderboard-row { transition: none; }
   .mode-button:active:not(:focus-visible), .result-option:active:not(:focus-visible), .leaderboard-row:active:not(:focus-visible) { transform: none; }
-  .charts-panel .recharts-radar { animation: none; }
+  .recharts-radar { animation-duration: 0ms !important; }
+  .recharts-scatter { animation-duration: 0ms !important; }
+  .recharts-bar { animation-duration: 0ms !important; }
+  .recharts-wrapper { animation-duration: 0ms !important; }
+  .recharts-curve { animation-duration: 0ms !important; }
+  .recharts-active-dot { animation-duration: 0ms !important; }
+  .recharts-tooltip-wrapper { animation-duration: 0ms !important; }
 }
+
+/* Explicit Recharts animation rules: radar/bar may animate at 220ms, scatter must not */
+.recharts-radar { animation-duration: 220ms; transition: none; }
+.recharts-scatter { animation-duration: 0ms; transition: none; }
+.recharts-bar { animation-duration: 220ms; transition: none; }
+.recharts-wrapper { animation-duration: 220ms; transition: none; }
+.recharts-curve { animation-duration: 220ms; transition: none; }
+.recharts-active-dot { animation-duration: 0ms; transition: none; }
+.recharts-tooltip-wrapper { animation-duration: 0ms; transition: none; }

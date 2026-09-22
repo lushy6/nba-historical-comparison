@@ -18,4 +18,10 @@ describe("HomePage", () => {
       screen.getByRole("searchbox", { name: "Search NBA history" }),
     ).toBeInTheDocument();
   });
+
+  it("provides the player search entry point", () => {
+    render(<HomePage />);
+    expect(screen.getByText("Players")).toBeInTheDocument();
+    expect(screen.getByText("Teams")).toBeInTheDocument();
+  });
 });
