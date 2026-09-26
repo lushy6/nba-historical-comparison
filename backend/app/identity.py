@@ -8,6 +8,7 @@ from functools import lru_cache
 from pathlib import Path
 import sqlite3
 from typing import Literal, TYPE_CHECKING
+from unicodedata import combining, normalize
 
 if TYPE_CHECKING:
     from app.catalog import DatasetCatalog
@@ -37,7 +38,7 @@ class LocalIdentityIndex:
         if records is None:
             records = self._load_records(kind)
             self._records[kind] = records
-        return records.get(name.casefold())
+        return records.get(fold_name(name))
 
     def _load_records(self, kind: IdentityKind) -> dict[str, VisualIdentityRecord | None]:
         table = "player" if kind == "player" else "team"
@@ -52,7 +53,7 @@ class LocalIdentityIndex:
         for nba_id, full_name in rows:
             if nba_id is None or full_name is None:
                 continue
-            key = str(full_name).casefold()
+            key = fold_name(str(full_name))
             candidate = VisualIdentityRecord(kind=kind, nba_id=str(nba_id))
             existing = records.get(key)
             if existing is None and key in records:
@@ -62,6 +63,16 @@ class LocalIdentityIndex:
             else:
                 records[key] = candidate
         return records
+
+
+def fold_name(value: object) -> str:
+    """Case- and accent-insensitive key: the catalog spells "Jokić", the index "Jokic"."""
+
+    return "".join(
+        character
+        for character in normalize("NFKD", str(value))
+        if not combining(character)
+    ).casefold()
 
 
 @lru_cache(maxsize=8)

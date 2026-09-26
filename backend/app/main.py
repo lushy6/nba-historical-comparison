@@ -2,14 +2,19 @@
 
 from functools import lru_cache
 from typing import Annotated, Literal
-from unicodedata import combining, normalize
 
 import pandas as pd
 from fastapi import Depends, FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.catalog import DatasetCatalog
-from app.identity import LocalIdentityIndex, VisualIdentityRecord, image_url_for, identity_index_for
+from app.identity import (
+    LocalIdentityIndex,
+    VisualIdentityRecord,
+    fold_name,
+    identity_index_for,
+    image_url_for,
+)
 from app.resolver import SchemaResolutionError, SchemaResolver
 from app.schemas import (
     AppliedScope,
@@ -347,8 +352,4 @@ def _split_pipe(value: str) -> list[str]:
 
 
 def _searchable_text(value: object) -> str:
-    return "".join(
-        character
-        for character in normalize("NFKD", str(value))
-        if not combining(character)
-    ).casefold()
+    return fold_name(value)

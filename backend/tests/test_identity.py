@@ -87,3 +87,30 @@ def test_identity_index_returns_none_when_database_disappears_before_stat(
     monkeypatch.setattr(Path, "is_file", delete_after_existence_check)
 
     assert identity_index_for(catalog) is None
+
+
+def test_accented_catalog_names_resolve_to_ascii_identity_names(tmp_path: Path) -> None:
+    path = tmp_path / "identity.sqlite"
+    seed(path)
+    with closing(sqlite3.connect(path)) as connection:
+        connection.execute("INSERT INTO player VALUES (203999, 'Nikola Jokic')")
+        connection.execute("INSERT INTO player VALUES (1630578, 'Alperen Şengün')")
+        connection.commit()
+    index = LocalIdentityIndex(path)
+
+    jokic = index.resolve("player", "Nikola Jokić")
+    sengun = index.resolve("player", "ALPEREN SENGUN")
+
+    assert jokic is not None and jokic.nba_id == "203999"
+    assert sengun is not None and sengun.nba_id == "1630578"
+
+
+def test_names_that_collide_only_after_accent_folding_stay_ambiguous(tmp_path: Path) -> None:
+    path = tmp_path / "identity.sqlite"
+    seed(path)
+    with closing(sqlite3.connect(path)) as connection:
+        connection.execute("INSERT INTO player VALUES (1, 'Jose Garcia')")
+        connection.execute("INSERT INTO player VALUES (2, 'José García')")
+        connection.commit()
+
+    assert LocalIdentityIndex(path).resolve("player", "José García") is None
