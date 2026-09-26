@@ -26,3 +26,7 @@ nba.sqlite
 .DS_Store
 Thumbs.db
 .vscode/
+
+# Historical CSV data (local data directory, not committed)
+data/
+*.sqlite

@@ -37,6 +37,19 @@ TEAM_COMPARISON_METRICS = (
     "pace",
 )
 
+# Optional Team Summaries columns: overall strength, shot profile, and the defensive
+# four factors. Older seasons lack some of them; they are omitted, never imputed.
+HISTORICAL_TEAM_ADVANCED_COLUMNS = {
+    "srs": "simple_rating",
+    "ts_percent": "true_shooting_pct",
+    "x3p_ar": "three_point_attempt_rate",
+    "opp_e_fg_percent": "opp_effective_field_goal_pct",
+    "opp_tov_percent": "opp_turnover_pct",
+    "drb_percent": "defensive_rebound_pct",
+    "opp_ft_fga": "opp_free_throw_rate",
+}
+TEAM_ADVANCED_METRICS = tuple(HISTORICAL_TEAM_ADVANCED_COLUMNS.values())
+
 
 METRIC_ALIASES: dict[str, tuple[str, ...]] = {
     "player_id": ("PERSON_ID", "PLAYER_ID", "PLAYERID", "ID"),
@@ -112,6 +125,23 @@ class SchemaResolver:
         source_table = self._find_player_stats_table(report)
         source_columns = self._column_mapping(source_table)
         source_frame = self._load_table(source_table, source_columns)
+        # Generic ID/NAME aliases can describe a player, so they do not verify a team.
+        has_affiliation = (
+            _canonical_identifier(source_columns.get("team_id", "")) == "teamid"
+            and _canonical_identifier(source_columns.get("team_name", "")) == "teamname"
+        )
+        source_frame["team_codes"] = ""
+        source_frame["team_names"] = ""
+        if has_affiliation:
+            valid_team = (
+                source_frame["team_id"].notna()
+                & source_frame["team_name"].notna()
+                & source_frame["team_id"].ne("")
+                & source_frame["team_name"].ne("")
+                & source_frame["team_id"].str.upper().ne("TOT")
+            )
+            source_frame.loc[valid_team, "team_codes"] = source_frame.loc[valid_team, "team_id"]
+            source_frame.loc[valid_team, "team_names"] = source_frame.loc[valid_team, "team_name"]
 
         if "player_name" not in source_frame.columns:
             source_frame = self._attach_player_names(report, source_table.name, source_frame)
@@ -233,6 +263,15 @@ class SchemaResolver:
             how="left",
             validate="one_to_one",
         )
+        frame["season"] = frame["season"].astype("string")
+        frame["team"] = frame["team"].astype("string")
+        frame = frame.merge(
+            self._historical_team_labels(),
+            left_on=["season", "team"],
+            right_on=["season", "team_code"],
+            how="left",
+            validate="many_to_one",
+        )
         normalized = self._collapse_historical_player_rows(frame)
         advanced_features = tuple(
             metric
@@ -276,23 +315,35 @@ class SchemaResolver:
                 "o_rtg": "offensive_rating",
                 "d_rtg": "defensive_rating",
                 "n_rtg": "net_rating",
+                **HISTORICAL_TEAM_ADVANCED_COLUMNS,
             }
         )
-        for metric in TEAM_COMPARISON_METRICS:
+        advanced_features = tuple(
+            metric
+            for metric in TEAM_ADVANCED_METRICS
+            if metric in frame.columns and pd.to_numeric(frame[metric], errors="coerce").notna().any()
+        )
+        for metric in (*TEAM_COMPARISON_METRICS, *advanced_features):
             frame[metric] = pd.to_numeric(frame[metric], errors="coerce")
-        for metric in ("turnover_pct", "offensive_rebound_pct"):
-            frame[metric] = frame[metric].where(frame[metric] <= 1, frame[metric] / 100)
+        for metric in ("turnover_pct", "offensive_rebound_pct", "opp_turnover_pct", "defensive_rebound_pct"):
+            if metric in frame.columns:
+                frame[metric] = frame[metric].where(frame[metric] <= 1, frame[metric] / 100)
 
         clean = frame.dropna(subset=["team_id", "team_name", "season"]).copy()
         clean["team_id"] = clean["team_id"].astype("string")
         clean["season"] = clean["season"].astype("string")
         clean = clean.rename(columns={"team_name": "name"})
+        clean["team_codes"] = clean["team_id"]
+        clean["team_names"] = clean["name"]
         clean.insert(0, "profile_id", clean["team_id"] + ":" + clean["season"])
         return ResolvedSeasonFrame(
-            frame=clean.loc[:, ["profile_id", "team_id", "season", "name", *TEAM_COMPARISON_METRICS]],
+            frame=clean.loc[:, [
+                "profile_id", "team_id", "season", "name", "team_codes", "team_names",
+                *TEAM_COMPARISON_METRICS, *advanced_features,
+            ]],
             source_table="historical_csv:team_season",
             base_features=TEAM_COMPARISON_METRICS,
-            advanced_features=(),
+            advanced_features=advanced_features,
         )
 
     def _require_ready_catalog(self, report: CatalogReport) -> None:
@@ -318,6 +369,18 @@ class SchemaResolver:
         if self.catalog.historical_data_path is None:
             raise SchemaResolutionError("No historical CSV data directory was configured.")
         return self.catalog.historical_data_path
+
+    def _historical_team_labels(self) -> pd.DataFrame:
+        labels = self._filter_historical_leagues(
+            self._load_historical_csv(
+                "Team Abbrev.csv", ("season", "lg", "team", "abbreviation")
+            )
+        ).rename(columns={"abbreviation": "team_code", "team": "team_name"})
+        labels["season"] = labels["season"].astype("string")
+        labels["team_code"] = labels["team_code"].astype("string")
+        return labels.drop_duplicates(["season", "team_code"], keep="first").loc[
+            :, ["season", "team_code", "team_name"]
+        ]
 
     @staticmethod
     def _filter_historical_leagues(frame: pd.DataFrame) -> pd.DataFrame:
@@ -346,6 +409,12 @@ class SchemaResolver:
         non_total_rows = frame.loc[
             frame["team"].astype("string").str.upper() != "TOT"
         ]
+        verified_affiliations = non_total_rows.loc[
+            non_total_rows["team_name"].notna() & non_total_rows["team_name"].ne("")
+        ]
+        affiliations = verified_affiliations.groupby(
+            key_columns, as_index=False, sort=False, dropna=False
+        ).agg(team_codes=("team_code", _joined_unique), team_names=("team_name", _joined_unique))
         non_total_rows = non_total_rows.merge(
             total_rows.loc[:, key_columns].assign(_has_total=True),
             on=key_columns,
@@ -368,19 +437,52 @@ class SchemaResolver:
                 combined[column] = group[column].sum(min_count=1)
             combined_rows.append(combined)
 
-        normalized = pd.concat(
-            [total_rows, single_rows, pd.DataFrame(combined_rows)], ignore_index=True
-        ).dropna(subset=["player_id", "player_name", "season"])
+        # pandas deprecates concat with empty or all-NA entries whose dtype has
+        # to be negotiated. Exclude empty frames and drop per-frame all-NA filler
+        # columns (kept by the reference frame) so dtypes come from real values.
+        # Output rows and values are identical to the legacy concat behavior.
+        concat_frames = [
+            frame
+            for frame in (total_rows, single_rows, pd.DataFrame(combined_rows))
+            if not frame.empty
+        ]
+        if not concat_frames:
+            concat_frames = [total_rows]
+        reference = max(concat_frames, key=len)
+        aligned_frames: list[pd.DataFrame] = []
+        for frame in concat_frames:
+            if frame is not reference:
+                filler_columns = [
+                    column
+                    for column in frame.columns
+                    if column in reference.columns
+                    and frame[column].isna().all()
+                    and not reference[column].isna().all()
+                ]
+                frame = frame.drop(columns=filler_columns)
+            aligned_frames.append(frame)
+        normalized = pd.concat(aligned_frames, ignore_index=True).dropna(
+            subset=["player_id", "player_name", "season"]
+        )
+        normalized = normalized.merge(
+            affiliations, on=key_columns, how="left", validate="one_to_one"
+        )
+        normalized[["team_codes", "team_names"]] = normalized[
+            ["team_codes", "team_names"]
+        ].fillna("")
         normalized["player_id"] = normalized["player_id"].astype("string")
         normalized["season"] = normalized["season"].astype("string")
         normalized = normalized.rename(columns={"player_name": "name"})
         for feature in PLAYER_ADVANCED_METRICS:
             if feature not in normalized.columns:
-                normalized[feature] = pd.NA
+                normalized[feature] = None
         normalized.insert(0, "profile_id", normalized["player_id"] + ":" + normalized["season"])
         return normalized.loc[
             :,
-            ["profile_id", "player_id", "season", "name", *PLAYER_BASE_METRICS, *PLAYER_ADVANCED_METRICS],
+            [
+                "profile_id", "player_id", "season", "name", "team_codes", "team_names",
+                *PLAYER_BASE_METRICS, *PLAYER_ADVANCED_METRICS,
+            ],
         ]
 
     def _find_player_stats_table(self, report: CatalogReport) -> CatalogTable:
@@ -537,7 +639,16 @@ class SchemaResolver:
             .reset_index(drop=True)
         )
         grouped.insert(0, "profile_id", grouped["player_id"] + ":" + grouped["season"])
-        return grouped
+        affiliations = clean.groupby(["player_id", "season"], as_index=False, dropna=False).agg(
+            team_codes=("team_codes", _joined_unique), team_names=("team_names", _joined_unique)
+        )
+        grouped = grouped.merge(
+            affiliations, on=["player_id", "season"], how="left", validate="one_to_one"
+        )
+        return grouped.loc[:, [
+            "profile_id", "player_id", "season", "name", "team_codes", "team_names",
+            *numeric_features,
+        ]]
 
     @staticmethod
     def _aggregate_team_seasons(frame: pd.DataFrame) -> pd.DataFrame:
@@ -557,11 +668,17 @@ class SchemaResolver:
             .reset_index(drop=True)
         )
         grouped.insert(0, "profile_id", grouped["team_id"] + ":" + grouped["season"])
+        grouped.insert(4, "team_codes", grouped["team_id"])
+        grouped.insert(5, "team_names", grouped["name"])
         return grouped
 
 
 def _canonical_identifier(value: str) -> str:
     return re.sub(r"[^a-z0-9]", "", value.casefold())
+
+
+def _joined_unique(values: pd.Series) -> str:
+    return "|".join(sorted({str(value) for value in values.dropna() if str(value)}))
 
 
 def _weighted_mean(values: pd.Series, weights: pd.Series) -> float:

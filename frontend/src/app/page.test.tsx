@@ -1,21 +1,31 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
 import HomePage from "./page";
 
 
 describe("HomePage", () => {
-  it("introduces the historical comparison search", () => {
+  it("introduces the historical comparison search", async () => {
     render(<HomePage />);
 
-    expect(
-      screen.getByRole("heading", {
-        level: 1,
-        name: "Find the season that echoes today.",
-      }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("searchbox", { name: "Search NBA history" }),
-    ).toBeInTheDocument();
+    await waitFor(() => {
+      expect(
+        screen.getByRole("heading", {
+          level: 1,
+          name: "Find the season that echoes today.",
+        }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("searchbox", { name: "Search NBA history" }),
+      ).toBeInTheDocument();
+    });
+  });
+
+  it("provides the player search entry point", async () => {
+    render(<HomePage />);
+    await waitFor(() => {
+      expect(screen.getByText("Players")).toBeInTheDocument();
+      expect(screen.getByText("Teams")).toBeInTheDocument();
+    });
   });
 });

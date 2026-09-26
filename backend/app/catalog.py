@@ -144,6 +144,19 @@ class DatasetCatalog:
             )
         return ("missing", str(self.database_path.resolve()))
 
+    def identity_signature(self) -> tuple[str, int | None, int | None]:
+        """Return the optional SQLite file metadata used to invalidate identity caches."""
+
+        database_path = str(self.database_path)
+        try:
+            database_path = str(self.database_path.resolve())
+            if not self.database_path.is_file():
+                return (database_path, None, None)
+            stat = self.database_path.stat()
+        except OSError:
+            return (database_path, None, None)
+        return (database_path, stat.st_size, stat.st_mtime_ns)
+
     def _has_historical_csv_source(self) -> bool:
         return bool(
             self.historical_data_path
@@ -161,7 +174,7 @@ class DatasetCatalog:
         except (OSError, UnicodeDecodeError) as error:
             return CatalogReport(
                 status="dataset_unreadable",
-                database_path=str(self.historical_data_path),
+                database_path=self.historical_data_path.name,
                 tables=(),
                 message=f"Historical CSV data could not be inspected: {error}",
                 source_format="historical_csv",
@@ -169,7 +182,7 @@ class DatasetCatalog:
 
         return CatalogReport(
             status="dataset_ready",
-            database_path=str(self.historical_data_path),
+            database_path=self.historical_data_path.name,
             tables=tables,
             message="Historical CSV catalog discovered. Source mappings are validated before comparisons run.",
             source_format="historical_csv",

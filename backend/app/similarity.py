@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Sequence
+from typing import Literal, Sequence
 
 import numpy as np
 import pandas as pd
 from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.preprocessing import StandardScaler
+
+from app.identity import VisualIdentityRecord
+from app.scope import ComparisonScope, filter_frame, filter_match_pool
 
 
 RADAR_LABELS = {
@@ -24,6 +27,13 @@ RADAR_LABELS = {
     "rebounds": "REB",
     "free_throw_attempts": "FTA",
     "free_throws_made": "FTM",
+    "simple_rating": "SRS",
+    "true_shooting_pct": "TS%",
+    "three_point_attempt_rate": "3PA Rate",
+    "opp_effective_field_goal_pct": "Opp eFG%",
+    "opp_turnover_pct": "Opp TOV%",
+    "defensive_rebound_pct": "DRB%",
+    "opp_free_throw_rate": "Opp FT Rate",
 }
 
 
@@ -36,6 +46,9 @@ class SeasonProfile:
     profile_id: str
     name: str
     season: str
+    team_codes: tuple[str, ...] = ()
+    team_names: tuple[str, ...] = ()
+    visual: VisualIdentityRecord | None = None
 
 
 @dataclass(frozen=True)
@@ -49,14 +62,34 @@ class RadarPoint:
 
 
 @dataclass(frozen=True)
-class ComparisonResult:
-    selected: SeasonProfile
-    match: SeasonProfile
+class MetricGroups:
+    basic: tuple[RadarPoint, ...]
+    advanced: tuple[RadarPoint, ...]
+
+
+@dataclass(frozen=True)
+class RankedComparison:
+    profile: SeasonProfile
     similarity_score: float
     rank: int
     tier: str
+    metrics: MetricGroups
+
+    @property
+    def basic_metrics(self) -> tuple[RadarPoint, ...]:
+        return self.metrics.basic
+
+    @property
+    def advanced_metrics(self) -> tuple[RadarPoint, ...]:
+        return self.metrics.advanced
+
+
+@dataclass(frozen=True)
+class ComparisonResult:
+    selected: SeasonProfile
+    matches: tuple[RankedComparison, ...]
+    eligible_count: int
     features_used: tuple[str, ...]
-    radar: tuple[RadarPoint, ...]
 
 
 class SimilarityEngine:
@@ -69,7 +102,14 @@ class SimilarityEngine:
         selected_profile_id: str,
         base_features: Sequence[str],
         advanced_features: Sequence[str],
+        scope: ComparisonScope,
+        kind: Literal["player", "team"],
+        limit: int = 15,
     ) -> ComparisonResult:
+        if not isinstance(limit, int) or isinstance(limit, bool) or limit < 1:
+            raise ComparisonError("The comparison result limit must be a positive integer.")
+        limit = min(limit, 15)
+
         selected_rows = frame.loc[frame["profile_id"] == selected_profile_id]
         if selected_rows.empty:
             raise ComparisonError("The requested profile was not found in the resolved dataset.")
@@ -97,50 +137,69 @@ class SimilarityEngine:
             if feature in frame.columns and pd.notna(selected[feature])
         )
         features = tuple((*usable_base, *usable_advanced))
-        complete_profiles = frame.dropna(subset=list(features)).copy()
-        complete_profiles = complete_profiles.drop_duplicates(subset=["profile_id"], keep="first")
+        scoped_candidates = filter_frame(
+            frame.loc[frame["profile_id"] != selected_profile_id], scope, kind=kind
+        ).dropna(subset=list(features)).drop_duplicates(subset=["profile_id"], keep="first")
+        # The match pool narrows which profiles are ranked, not the yardstick: scaling and
+        # radar domains come from the season/team scope, so a season scores the same
+        # whether or not the selected entity's other seasons are listed beside it.
+        complete_candidates = filter_match_pool(scoped_candidates, selected_profile_id, scope.pool)
+        if complete_candidates.empty:
+            raise ComparisonError(
+                "No eligible historical alternatives remain for the selected filters."
+            )
 
-        if (
-            selected_profile_id not in set(complete_profiles["profile_id"])
-            or len(complete_profiles) < 2
-        ):
-            raise ComparisonError("A comparison needs at least two complete profiles.")
-
-        selected_index = complete_profiles.index[
-            complete_profiles["profile_id"] == selected_profile_id
-        ][0]
-        scaled_values = StandardScaler().fit_transform(complete_profiles.loc[:, features])
-        selected_position = complete_profiles.index.get_loc(selected_index)
-        similarities = cosine_similarity(
-            scaled_values[[selected_position]], scaled_values
-        ).ravel()
-        similarities[selected_position] = -np.inf
+        scaler = StandardScaler().fit(scoped_candidates.loc[:, features])
+        candidate_values = scaler.transform(complete_candidates.loc[:, features])
+        selected_values = scaler.transform(selected.to_frame().T.loc[:, features])
+        similarities = cosine_similarity(selected_values, candidate_values).ravel()
 
         # If every requested feature is constant, standardized values are zero. Identical
         # profiles are still a perfect match; no statistical signal means no invented gap.
-        zero_norm = np.linalg.norm(scaled_values, axis=1) == 0
-        if zero_norm[selected_position]:
-            similarities[zero_norm] = 1.0
-            similarities[selected_position] = -np.inf
+        candidate_zero_norm = np.linalg.norm(candidate_values, axis=1) == 0
+        selected_zero_norm = np.linalg.norm(selected_values[0]) == 0
+        if selected_zero_norm:
+            similarities[candidate_zero_norm] = 1.0
 
-        best_position = int(np.argmax(similarities))
-        best_similarity = float(similarities[best_position])
-        match = complete_profiles.iloc[best_position]
-        score = round((best_similarity + 1) * 50, 1)
+        ranking = pd.DataFrame(
+            {
+                "profile_id": complete_candidates["profile_id"].astype(str).to_numpy(),
+                "similarity": similarities,
+                "source_order": np.arange(len(complete_candidates)),
+            }
+        ).sort_values(
+            ["similarity", "profile_id"], ascending=[False, True], kind="stable"
+        ).head(limit)
+
+        domain_profiles = pd.concat(
+            [selected.to_frame().T.loc[:, features], scoped_candidates.loc[:, features]]
+        )
+        domains = {
+            feature: (float(domain_profiles[feature].min()), float(domain_profiles[feature].max()))
+            for feature in features
+        }
+        matches: list[RankedComparison] = []
+        for rank, entry in enumerate(ranking.itertuples(index=False), 1):
+            match = complete_candidates.iloc[entry.source_order]
+            score = round((float(entry.similarity) + 1) * 50, 1)
+            matches.append(
+                RankedComparison(
+                    profile=self._profile(match),
+                    similarity_score=score,
+                    rank=rank,
+                    tier=similarity_tier(score),
+                    metrics=MetricGroups(
+                        basic=self._radar(domains, selected, match, usable_base),
+                        advanced=self._radar(domains, selected, match, usable_advanced),
+                    ),
+                )
+            )
 
         return ComparisonResult(
             selected=self._profile(selected),
-            match=self._profile(match),
-            similarity_score=score,
-            rank=1,
-            tier=similarity_tier(score),
+            matches=tuple(matches),
+            eligible_count=len(complete_candidates),
             features_used=features,
-            radar=self._radar(
-                complete_profiles,
-                selected,
-                match,
-                usable_base,
-            ),
         )
 
     @staticmethod
@@ -149,19 +208,21 @@ class SimilarityEngine:
             profile_id=str(row["profile_id"]),
             name=str(row["name"]),
             season=str(row["season"]),
+            team_codes=_team_values(row.get("team_codes")),
+            team_names=_team_values(row.get("team_names")),
+            visual=row.get("visual") if isinstance(row.get("visual"), VisualIdentityRecord) else None,
         )
 
     @staticmethod
     def _radar(
-        complete_profiles: pd.DataFrame,
+        domains: dict[str, tuple[float, float]],
         selected: pd.Series,
         match: pd.Series,
-        base_features: tuple[str, ...],
+        features: tuple[str, ...],
     ) -> tuple[RadarPoint, ...]:
         points: list[RadarPoint] = []
-        for feature in base_features:
-            minimum = float(complete_profiles[feature].min())
-            maximum = float(complete_profiles[feature].max())
+        for feature in features:
+            minimum, maximum = domains[feature]
             points.append(
                 RadarPoint(
                     metric=feature,
@@ -173,6 +234,10 @@ class SimilarityEngine:
                 )
             )
         return tuple(points)
+
+
+def _team_values(value: object) -> tuple[str, ...]:
+    return tuple(value.split("|")) if isinstance(value, str) and value else ()
 
 
 def similarity_tier(score: float) -> str:
