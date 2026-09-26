@@ -1,4 +1,4 @@
-﻿import { fireEvent, render, screen } from "@testing-library/react";
+﻿import { fireEvent, render, screen, within } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
 import { useState } from "react";
 
@@ -50,4 +50,23 @@ it("disables controls while options are loading", () => {
   render(<ComparisonFilters kind="player" value={{}} options={null} onChange={vi.fn()} disabled={false} />);
   const fieldset = screen.getByRole("group");
   expect(fieldset).toBeDisabled();
+});
+
+it("emits the match pool with player wording", () => {
+  const onChange = vi.fn();
+  render(<ComparisonFilters kind="player" value={{}} options={playerOptions} onChange={onChange} disabled={false} />);
+  const pool = screen.getByLabelText("Matches");
+  expect(within(pool).getAllByRole("option").map((option) => option.textContent)).toEqual([
+    "Any player", "Other players only", "Same player only",
+  ]);
+  fireEvent.change(pool, { target: { value: "others" } });
+  expect(onChange).toHaveBeenLastCalledWith({ pool: "others" });
+});
+
+it("offers the match pool for team comparisons with team wording", () => {
+  const onChange = vi.fn();
+  render(<ComparisonFilters kind="team" value={{}} options={teamOptions} onChange={onChange} disabled={false} />);
+  fireEvent.change(screen.getByLabelText("Matches"), { target: { value: "same" } });
+  expect(screen.getByRole("option", { name: "Same team only" })).toBeInTheDocument();
+  expect(onChange).toHaveBeenLastCalledWith({ pool: "same" });
 });

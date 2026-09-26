@@ -31,7 +31,7 @@ from app.schemas import (
     TeamContext,
     VisualIdentity,
 )
-from app.scope import ComparisonScope, ScopeValidationError, filter_frame
+from app.scope import ComparisonScope, MatchPool, ScopeValidationError, filter_frame
 from app.similarity import ComparisonError, RankedComparison, SeasonProfile, SimilarityEngine
 
 
@@ -74,15 +74,20 @@ SeasonFromQuery = Annotated[int | None, Query(ge=1946, le=2100, description="Inc
 SeasonToQuery = Annotated[int | None, Query(ge=1946, le=2100, description="Inclusive last season year")]
 TeamQuery = Annotated[str | None, Query(min_length=1, max_length=10, description="Filter by team abbreviation")]
 SearchQuery = Annotated[str, Query(min_length=2, max_length=100)]
+PoolQuery = Annotated[
+    MatchPool,
+    Query(description="all: any season; others: exclude the selected player/team; same: only its other seasons"),
+]
 
 
 def _build_player_scope(
     season_from: SeasonFromQuery = None,
     season_to: SeasonToQuery = None,
     team: TeamQuery = None,
+    pool: PoolQuery = "all",
 ) -> ComparisonScope:
     try:
-        return ComparisonScope(season_from=season_from, season_to=season_to, team=team)
+        return ComparisonScope(season_from=season_from, season_to=season_to, team=team, pool=pool)
     except ScopeValidationError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
 
@@ -91,6 +96,7 @@ def _build_team_scope(
     season_from: SeasonFromQuery = None,
     season_to: SeasonToQuery = None,
     team: TeamQuery = None,
+    pool: PoolQuery = "all",
 ) -> ComparisonScope:
     if team is not None:
         raise HTTPException(
@@ -98,7 +104,7 @@ def _build_team_scope(
             detail="Team filtering is only available for player comparisons.",
         )
     try:
-        return ComparisonScope(season_from=season_from, season_to=season_to, team=None)
+        return ComparisonScope(season_from=season_from, season_to=season_to, team=None, pool=pool)
     except ScopeValidationError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
 
@@ -283,6 +289,7 @@ def _compare(profile_id: str, scope: ComparisonScope, *, kind: EntityKind):
             season_from=scope.season_from,
             season_to=scope.season_to,
             team=scope.team,
+            pool=scope.pool,
             eligible_count=result.eligible_count,
         ),
         features_used=list(result.features_used),

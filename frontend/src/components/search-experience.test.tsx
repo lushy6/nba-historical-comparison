@@ -141,6 +141,27 @@ describe("SearchExperience", () => {
     expect(screen.queryByRole("region", { name: "Historical comparison result" })).not.toBeInTheDocument();
   });
 
+  it("re-compares the same selection in place when only the match pool changes", async () => {
+    const fetchMock = mockService();
+    render(<SearchExperience />);
+    await act(async () => {});
+    await choosePlayer();
+    await screen.findByRole("heading", { name: "Beacon Wing" });
+    const searchesBefore = fetchMock.mock.calls.filter(([url]) => url.includes("/search")).length;
+
+    fireEvent.change(screen.getByLabelText("Matches"), { target: { value: "others" } });
+
+    await waitFor(() => {
+      const compareUrls = fetchMock.mock.calls.map(([url]) => url).filter((url) => url.includes("/compare"));
+      expect(compareUrls).toHaveLength(2);
+      expect(compareUrls[1]).toContain("/api/players/7%3A2022-23/compare?pool=others");
+    });
+    expect(await screen.findByRole("heading", { name: "Beacon Wing" })).toBeInTheDocument();
+    await new Promise((done) => setTimeout(done, 200));
+    expect(fetchMock.mock.calls.filter(([url]) => url.includes("/search"))).toHaveLength(searchesBefore);
+    expect(screen.queryByRole("button", { name: /Aster Guard/ })).not.toBeInTheDocument();
+  });
+
   it("keeps filters and results when the already-active mode is chosen", async () => {
     const fetchMock = mockService();
     render(<SearchExperience />);

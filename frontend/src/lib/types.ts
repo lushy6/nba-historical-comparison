@@ -51,16 +51,21 @@ export type RankedMatch = {
   metrics: MetricGroups;
 };
 
+// Whether matches may include other seasons of the selected player or team.
+export type MatchPool = "all" | "others" | "same";
+
 export type ComparisonScope = {
   season_from?: number;
   season_to?: number;
   team?: string;
+  pool?: MatchPool;
 };
 
 export type AppliedScope = {
   season_from: number | null;
   season_to: number | null;
   team: string | null;
+  pool?: MatchPool;
   eligible_count: number;
 };
 

@@ -27,6 +27,13 @@ function scopeParams(scope?: ComparisonScope): URLSearchParams {
   return params;
 }
 
+// The match pool narrows comparison candidates only; search ignores it.
+function comparisonParams(scope: ComparisonScope): URLSearchParams {
+  const params = scopeParams(scope);
+  if (scope.pool && scope.pool !== "all") params.set("pool", scope.pool);
+  return params;
+}
+
 export function loadFilterOptions(kind: EntityKind, signal?: AbortSignal): Promise<FilterOptions> {
   return request<FilterOptions>(`/api/${kind}s/filters`, signal);
 }
@@ -48,7 +55,7 @@ export function loadComparison(
   scope: ComparisonScope,
   signal?: AbortSignal,
 ): Promise<Comparison> {
-  const params = scopeParams(scope);
+  const params = comparisonParams(scope);
   const query = params.toString() ? `?${params.toString()}` : "";
   return request<Comparison>(`/api/${kind}s/${encodeURIComponent(profileId)}/compare${query}`, signal);
 }

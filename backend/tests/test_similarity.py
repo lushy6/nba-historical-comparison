@@ -256,3 +256,74 @@ def test_similarity_supports_team_scope_and_optional_visual_identity_without_mut
     assert result.matches[0].profile.visual is None
     assert result.eligible_count == 2
     pd.testing.assert_frame_equal(frame, original)
+
+
+def multi_season_frame() -> pd.DataFrame:
+    rows = []
+    for profile_id, name, scale in (
+        ("aster:2024", "Aster Guard", 1.00),
+        ("aster:2023", "Aster Guard", 0.99),
+        ("beacon:2016", "Beacon Wing", 0.97),
+        ("cinder:1998", "Cinder Center", 0.40),
+    ):
+        row = {"profile_id": profile_id, "name": name, "season": profile_id.split(":")[1]}
+        row.update({feature: index * 10 * scale for index, feature in enumerate(PLAYER_BASE_METRICS, 1)})
+        rows.append(row)
+    return pd.DataFrame(rows)
+
+
+def _pool_ids(pool: str) -> list[str]:
+    result = SimilarityEngine().compare(
+        multi_season_frame(),
+        selected_profile_id="aster:2024",
+        base_features=PLAYER_BASE_METRICS,
+        advanced_features=(),
+        scope=ComparisonScope(pool=pool),
+        kind="player",
+    )
+    return [match.profile.profile_id for match in result.matches]
+
+
+def test_match_pool_all_includes_other_seasons_of_the_same_entity() -> None:
+    assert set(_pool_ids("all")) == {"aster:2023", "beacon:2016", "cinder:1998"}
+
+
+def test_match_pool_others_excludes_every_season_of_the_selected_entity() -> None:
+    assert set(_pool_ids("others")) == {"beacon:2016", "cinder:1998"}
+
+
+def test_match_pool_same_keeps_only_other_seasons_of_the_selected_entity() -> None:
+    assert _pool_ids("same") == ["aster:2023"]
+
+
+def test_match_pool_same_without_other_seasons_explains_the_empty_pool() -> None:
+    with pytest.raises(ComparisonError, match="No eligible historical alternatives"):
+        SimilarityEngine().compare(
+            multi_season_frame(),
+            selected_profile_id="beacon:2016",
+            base_features=PLAYER_BASE_METRICS,
+            advanced_features=(),
+            scope=ComparisonScope(pool="same"),
+            kind="player",
+        )
+
+
+def test_match_pool_filters_results_without_changing_the_scoring_yardstick() -> None:
+    def scores(pool: str) -> dict[str, tuple[float, tuple]]:
+        result = SimilarityEngine().compare(
+            multi_season_frame(),
+            selected_profile_id="aster:2024",
+            base_features=PLAYER_BASE_METRICS,
+            advanced_features=(),
+            scope=ComparisonScope(pool=pool),
+            kind="player",
+        )
+        return {
+            match.profile.profile_id: (match.similarity_score, match.basic_metrics)
+            for match in result.matches
+        }
+
+    everyone = scores("all")
+    for pool in ("others", "same"):
+        for profile_id, scored in scores(pool).items():
+            assert scored == everyone[profile_id]

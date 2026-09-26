@@ -46,3 +46,12 @@ def test_team_scope_rejects_team_filter() -> None:
 def test_scope_rejects_reversed_range() -> None:
     with pytest.raises(ScopeValidationError, match="must not exceed"):
         ComparisonScope(season_from=2000, season_to=1999, team=None)
+
+
+def test_scope_defaults_to_the_full_match_pool() -> None:
+    assert ComparisonScope().pool == "all"
+
+
+def test_scope_rejects_an_unknown_match_pool() -> None:
+    with pytest.raises(ScopeValidationError, match="match pool"):
+        ComparisonScope(pool="rivals")

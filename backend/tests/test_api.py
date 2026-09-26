@@ -211,3 +211,26 @@ def test_search_and_comparison_share_team_and_identity_context(
             {"code": "AUR", "name": "Aurora Comets"},
             {"code": "HAR", "name": "Harbor Pilots"},
         ]
+
+
+@pytest.mark.parametrize("kind, profile_id", [("player", "7:2022-23"), ("team", "1:2022-23")])
+def test_comparison_applies_and_echoes_the_match_pool(
+    tmp_path: Path, monkeypatch, kind: str, profile_id: str
+) -> None:
+    database_path = tmp_path / "nba.sqlite"
+    seed_database(database_path)
+    monkeypatch.setenv("NBA_DATABASE_PATH", str(database_path))
+    monkeypatch.setenv("NBA_HISTORICAL_DATA_PATH", str(tmp_path / "not-present"))
+
+    default = asyncio.run(get(f"/api/{kind}s/{profile_id}/compare"))
+    others = asyncio.run(get(f"/api/{kind}s/{profile_id}/compare?pool=others"))
+    same = asyncio.run(get(f"/api/{kind}s/{profile_id}/compare?pool=same"))
+    invalid = asyncio.run(get(f"/api/{kind}s/{profile_id}/compare?pool=rivals"))
+
+    assert default.json()["scope"]["pool"] == "all"
+    assert others.status_code == 200
+    assert others.json()["scope"]["pool"] == "others"
+    # Every seeded entity has a single season, so "same" leaves nothing to compare.
+    assert same.status_code == 422
+    assert "No eligible historical alternatives" in same.json()["detail"]
+    assert invalid.status_code == 422

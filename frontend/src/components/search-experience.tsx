@@ -22,6 +22,7 @@ export function SearchExperience() {
   const [isLoadingComparison, setIsLoadingComparison] = useState(false);
   const [comparison, setComparison] = useState<Comparison | null>(null);
   const [activeMatchId, setActiveMatchId] = useState<string | null>(null);
+  const [selectedItem, setSelectedItem] = useState<SearchItem | null>(null);
   const [error, setError] = useState<string | null>(null);
   const comparisonRequest = useRef<AbortController | null>(null);
   const searchRequest = useRef<AbortController | null>(null);
@@ -46,7 +47,9 @@ export function SearchExperience() {
     return () => controller.abort();
   }, [kind]);
 
-  // Search with debounce, including scope
+  // Search with debounce, scoped by seasons and team. The match pool only narrows
+  // comparison candidates, so changing it must not re-run the search.
+  const { season_from: seasonFrom, season_to: seasonTo, team } = scope;
   useEffect(() => {
     const trimmedQuery = query.trim();
     if (trimmedQuery.length < 2) return;
@@ -57,7 +60,7 @@ export function SearchExperience() {
       if (controller.signal.aborted) return;
       setIsSearching(true);
       setError(null);
-      searchHistory(kind, trimmedQuery, scope, controller.signal)
+      searchHistory(kind, trimmedQuery, { season_from: seasonFrom, season_to: seasonTo, team }, controller.signal)
         .then((response) => {
           if (!controller.signal.aborted) setItems(response.items.slice(0, 15));
         })
@@ -76,7 +79,7 @@ export function SearchExperience() {
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [kind, query, scope]);
+  }, [kind, query, seasonFrom, seasonTo, team]);
 
   function cancelRequests() {
     comparisonRequest.current?.abort();
@@ -86,14 +89,15 @@ export function SearchExperience() {
     setItems([]);
   }
 
-  async function selectItem(item: SearchItem) {
+  async function selectItem(item: SearchItem, comparisonScope: ComparisonScope = scope) {
     cancelRequests();
+    setSelectedItem(item);
     const controller = new AbortController();
     comparisonRequest.current = controller;
     setError(null);
     setIsLoadingComparison(true);
     try {
-      const result = await loadComparison(item.kind, item.id, scope, controller.signal);
+      const result = await loadComparison(item.kind, item.id, comparisonScope, controller.signal);
       if (controller.signal.aborted) return;
       setComparison({ ...result, matches: result.matches.slice(0, 15) });
       setActiveMatchId(result.matches[0]?.profile.id ?? null);
@@ -112,6 +116,7 @@ export function SearchExperience() {
     cancelRequests();
     setKind(nextKind);
     setScope({});
+    setSelectedItem(null);
     setFilterOptions(null);
     setFilterError(null);
     setComparison(null);
@@ -121,9 +126,17 @@ export function SearchExperience() {
   }
 
   function handleScopeChange(nextScope: ComparisonScope) {
-    if (nextScope.season_from === scope.season_from && nextScope.season_to === scope.season_to && nextScope.team === scope.team) return;
+    const searchScopeUnchanged = nextScope.season_from === scope.season_from && nextScope.season_to === scope.season_to && nextScope.team === scope.team;
+    if (searchScopeUnchanged) {
+      if ((nextScope.pool ?? "all") === (scope.pool ?? "all")) return;
+      // Only the match pool changed: re-rank the same selection in place.
+      setScope(nextScope);
+      if (selectedItem) void selectItem(selectedItem, nextScope);
+      return;
+    }
     cancelRequests();
     setScope(nextScope);
+    setSelectedItem(null);
     setComparison(null);
     setActiveMatchId(null);
     setError(null);

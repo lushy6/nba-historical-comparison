@@ -73,6 +73,7 @@ class AppliedScope(BaseModel):
     season_from: int | None = None
     season_to: int | None = None
     team: str | None = None
+    pool: Literal["all", "others", "same"] = "all"
     eligible_count: int = Field(ge=0)
 
 

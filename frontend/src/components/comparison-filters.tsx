@@ -1,6 +1,12 @@
 ﻿"use client";
 
-import type { ComparisonScope, EntityKind, FilterOptions } from "@/lib/types";
+import type { ComparisonScope, EntityKind, FilterOptions, MatchPool } from "@/lib/types";
+
+
+const POOL_LABELS: Record<EntityKind, Record<MatchPool, string>> = {
+  player: { all: "Any player", others: "Other players only", same: "Same player only" },
+  team: { all: "Any team", others: "Other teams only", same: "Same team only" },
+};
 
 
 type ComparisonFiltersProps = {
@@ -26,6 +32,10 @@ export function ComparisonFilters({ kind, value, options, onChange, disabled, er
   function handleTeam(event: React.ChangeEvent<HTMLSelectElement>) {
     const raw = event.target.value;
     onChange({ ...value, team: raw || undefined });
+  }
+
+  function handlePool(event: React.ChangeEvent<HTMLSelectElement>) {
+    onChange({ ...value, pool: event.target.value as MatchPool });
   }
 
   const seasons = options?.seasons ?? [];
@@ -89,6 +99,20 @@ export function ComparisonFilters({ kind, value, options, onChange, disabled, er
           </select>
         </div>
       )}
+
+      <div className="filter-row">
+        <label htmlFor="filter-pool" className="filter-label">Matches</label>
+        <select
+          id="filter-pool"
+          className="filter-select"
+          value={value.pool ?? "all"}
+          onChange={handlePool}
+        >
+          {(Object.entries(POOL_LABELS[kind]) as [MatchPool, string][]).map(([pool, label]) => (
+            <option key={pool} value={pool}>{label}</option>
+          ))}
+        </select>
+      </div>
     </fieldset>
   );
 }

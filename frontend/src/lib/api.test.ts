@@ -76,3 +76,14 @@ it("preserves enriched search profiles from the accepted API contract", async ()
   expect(result.items[0].teams[0].code).toBe("LAL");
   expect(result.items[0].visual.nba_id).toBe("2544");
 });
+
+it("sends a non-default match pool to compare but never to search", async () => {
+  vi.stubGlobal("fetch", vi.fn().mockImplementation(() => Promise.resolve(new Response(JSON.stringify({ items: [] })))));
+  await loadComparison("player", "jokicni01:2024", { pool: "others" });
+  await loadComparison("player", "jokicni01:2024", { pool: "all" });
+  await searchHistory("player", "jokic", { pool: "same" });
+  const urls = vi.mocked(fetch).mock.calls.map((call) => call[0] as string);
+  expect(urls[0]).toContain("pool=others");
+  expect(urls[1]).not.toContain("pool");
+  expect(urls[2]).not.toContain("pool");
+});

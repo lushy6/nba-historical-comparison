@@ -11,7 +11,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 from sklearn.preprocessing import StandardScaler
 
 from app.identity import VisualIdentityRecord
-from app.scope import ComparisonScope, filter_frame
+from app.scope import ComparisonScope, filter_frame, filter_match_pool
 
 
 RADAR_LABELS = {
@@ -130,19 +130,20 @@ class SimilarityEngine:
             if feature in frame.columns and pd.notna(selected[feature])
         )
         features = tuple((*usable_base, *usable_advanced))
-        candidates = filter_frame(
+        scoped_candidates = filter_frame(
             frame.loc[frame["profile_id"] != selected_profile_id], scope, kind=kind
-        )
-        complete_candidates = candidates.dropna(subset=list(features)).drop_duplicates(
-            subset=["profile_id"], keep="first"
-        )
+        ).dropna(subset=list(features)).drop_duplicates(subset=["profile_id"], keep="first")
+        # The match pool narrows which profiles are ranked, not the yardstick: scaling and
+        # radar domains come from the season/team scope, so a season scores the same
+        # whether or not the selected entity's other seasons are listed beside it.
+        complete_candidates = filter_match_pool(scoped_candidates, selected_profile_id, scope.pool)
         if complete_candidates.empty:
             raise ComparisonError(
                 "No eligible historical alternatives remain for the selected filters."
             )
 
-        scaler = StandardScaler()
-        candidate_values = scaler.fit_transform(complete_candidates.loc[:, features])
+        scaler = StandardScaler().fit(scoped_candidates.loc[:, features])
+        candidate_values = scaler.transform(complete_candidates.loc[:, features])
         selected_values = scaler.transform(selected.to_frame().T.loc[:, features])
         similarities = cosine_similarity(selected_values, candidate_values).ravel()
 
@@ -164,7 +165,7 @@ class SimilarityEngine:
         ).head(limit)
 
         domain_profiles = pd.concat(
-            [selected.to_frame().T.loc[:, features], complete_candidates.loc[:, features]]
+            [selected.to_frame().T.loc[:, features], scoped_candidates.loc[:, features]]
         )
         domains = {
             feature: (float(domain_profiles[feature].min()), float(domain_profiles[feature].max()))

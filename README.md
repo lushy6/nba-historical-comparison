@@ -65,13 +65,14 @@ Open `http://localhost:3000`. The frontend talks to `http://localhost:8000` by d
 | GET | `/api/teams/filters` | Available team seasons |
 | GET | `/api/players/search?q=&season_from=&season_to=&team=` | Scoped player search |
 | GET | `/api/teams/search?q=&season_from=&season_to=` | Scoped team search |
-| GET | `/api/players/{id}/compare?season_from=&season_to=&team=` | Player similarity with Top-15 matches |
-| GET | `/api/teams/{id}/compare?season_from=&season_to=` | Team similarity with Top-15 matches |
+| GET | `/api/players/{id}/compare?season_from=&season_to=&team=&pool=` | Player similarity with Top-15 matches |
+| GET | `/api/teams/{id}/compare?season_from=&season_to=&pool=` | Team similarity with Top-15 matches |
 
 ### Scope parameters
 
 - `season_from` / `season_to`: Inclusive four-digit integer year bounds. Equal values select a single season. Leaving either bound empty means unbounded history. Team comparisons do not accept a `team` filter.
 - `team`: Player comparison filter by team abbreviation code (e.g. `LAL`, `MIA`). Applies to player candidate pools only; a player who appeared for that franchise during a traded season remains eligible. Omit to compare across all teams.
+- `pool` (compare routes only): Whether matches may include other seasons of the selected player or team. `all` (default) allows both, `others` excludes the selected entity, and `same` keeps only its other seasons. The pool narrows which profiles are ranked, not how they are scored: standardization and radar domains always come from the season/team scope, so a season receives the same score in every pool. An unknown value returns HTTP 422.
 
 ### Inclusive season ranges
 
@@ -88,7 +89,7 @@ All comparison responses include:
 - `selected`: The chosen profile with visual identity and team context
 - `match`: Same object as `matches[0]` (compatibility alias)
 - `matches`: Up to 15 ranked alternatives, each containing `profile`, `similarity_score`, `power_ranking` (with `rank` and `tier`), and `metrics` (with `basic` and `advanced` arrays of `RadarMetric` points)
-- `scope`: Applied bounds including `season_from`, `season_to`, `team`, and `eligible_count`
+- `scope`: Applied bounds including `season_from`, `season_to`, `team`, `pool`, and `eligible_count`
 - `features_used`: The verified statistical dimensions used for the cosine similarity calculation
 
 Each `RadarMetric` point contains `metric` (canonical key), `label` (display label), `selected_value`, `match_value`, `selected_normalized`, and `match_normalized`. Missing historic measures are omitted from the feature list entirely — zero is never an imputed substitute.
