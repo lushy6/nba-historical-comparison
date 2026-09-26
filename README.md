@@ -94,6 +94,10 @@ All comparison responses include:
 
 Each `RadarMetric` point contains `metric` (canonical key), `label` (display label), `selected_value`, `match_value`, `selected_normalized`, and `match_normalized`. Missing historic measures are omitted from the feature list entirely — zero is never an imputed substitute.
 
+### Team metrics
+
+Team comparisons use eight basic measures from `Team Summaries.csv` (eFG%, TOV%, ORB%, FT rate, offensive/defensive/net rating, pace) plus, when the columns are present, seven advanced measures: SRS, TS%, 3PA rate, and the defensive four factors (opponent eFG%, opponent TOV%, DRB%, opponent FT rate). Like player advanced metrics they join the similarity calculation, so a season is only compared with candidates that recorded every measure it has — for modern teams this means 1980 onward, when the 3PA rate begins.
+
 ### Source format and identity health
 
 `GET /api/health` returns:

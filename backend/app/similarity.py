@@ -27,6 +27,13 @@ RADAR_LABELS = {
     "rebounds": "REB",
     "free_throw_attempts": "FTA",
     "free_throws_made": "FTM",
+    "simple_rating": "SRS",
+    "true_shooting_pct": "TS%",
+    "three_point_attempt_rate": "3PA Rate",
+    "opp_effective_field_goal_pct": "Opp eFG%",
+    "opp_turnover_pct": "Opp TOV%",
+    "defensive_rebound_pct": "DRB%",
+    "opp_free_throw_rate": "Opp FT Rate",
 }
 
 

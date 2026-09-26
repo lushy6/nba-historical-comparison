@@ -40,7 +40,7 @@ type ComparisonChartsProps = {
 const PLAYER_BASIC_SCATTER: [string, string] = ["points", "assists"];
 const PLAYER_ADVANCED_SCATTER: [string, string] = ["bpm", "win_shares"];
 const TEAM_BASIC_SCATTER: [string, string] = ["effective_field_goal_pct", "turnover_pct"];
-const TEAM_ADVANCED_SCATTER: [string, string] = ["net_rating", "pace"];
+const TEAM_ADVANCED_SCATTER: [string, string] = ["true_shooting_pct", "opp_effective_field_goal_pct"];
 
 function getScatterPair(mode: MetricMode, kind: EntityKind): [string, string] {
   if (kind === "player") {

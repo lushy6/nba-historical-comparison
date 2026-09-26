@@ -293,3 +293,58 @@ def test_historical_baa_affiliation_uses_verified_labels(tmp_path) -> None:
     frame = SchemaResolver(catalog).resolve_player_seasons().frame
 
     assert frame.set_index("profile_id").loc["aster01:2023", "team_names"] == "Aurora Comets"
+
+
+TEAM_ADVANCED_SOURCE = {
+    "AUR": {"srs": 5.4, "ts_percent": 0.598, "x3p_ar": 0.421, "opp_e_fg_percent": 0.531,
+            "opp_tov_percent": 13.2, "drb_percent": 76.1, "opp_ft_fga": 0.188},
+    "HBR": {"srs": 4.1, "ts_percent": 0.590, "x3p_ar": 0.384, "opp_e_fg_percent": 0.529,
+            "opp_tov_percent": 13.8, "drb_percent": 75.4, "opp_ft_fga": 0.191},
+}
+
+
+def _add_team_advanced_columns(source_directory: Path) -> None:
+    path = source_directory / "Team Summaries.csv"
+    frame = pd.read_csv(path)
+    for column in TEAM_ADVANCED_SOURCE["AUR"]:
+        frame[column] = frame["abbreviation"].map(lambda code: TEAM_ADVANCED_SOURCE[code][column])
+    frame.to_csv(path, index=False)
+
+
+def test_team_seasons_expose_advanced_metrics_from_team_summaries(tmp_path: Path) -> None:
+    source_directory = tmp_path / "historical"
+    build_historical_csv_source(source_directory)
+    _add_team_advanced_columns(source_directory)
+    catalog = DatasetCatalog(tmp_path / "missing.sqlite", historical_data_path=source_directory)
+
+    team_seasons = SchemaResolver(catalog).resolve_team_seasons()
+
+    assert team_seasons.advanced_features == (
+        "simple_rating",
+        "true_shooting_pct",
+        "three_point_attempt_rate",
+        "opp_effective_field_goal_pct",
+        "opp_turnover_pct",
+        "defensive_rebound_pct",
+        "opp_free_throw_rate",
+    )
+    team = team_seasons.frame.set_index("profile_id").loc["AUR:2023"]
+    assert team["simple_rating"] == 5.4
+    assert team["true_shooting_pct"] == 0.598
+    assert team["three_point_attempt_rate"] == 0.421
+    assert team["opp_effective_field_goal_pct"] == 0.531
+    # Percent-scale rates are stored as fractions, matching turnover_pct.
+    assert team["opp_turnover_pct"] == pytest.approx(0.132)
+    assert team["defensive_rebound_pct"] == pytest.approx(0.761)
+    assert team["opp_free_throw_rate"] == 0.188
+
+
+def test_team_seasons_without_advanced_columns_still_resolve(tmp_path: Path) -> None:
+    source_directory = tmp_path / "historical"
+    build_historical_csv_source(source_directory)
+    catalog = DatasetCatalog(tmp_path / "missing.sqlite", historical_data_path=source_directory)
+
+    team_seasons = SchemaResolver(catalog).resolve_team_seasons()
+
+    assert team_seasons.advanced_features == ()
+    assert "AUR:2023" in set(team_seasons.frame["profile_id"])

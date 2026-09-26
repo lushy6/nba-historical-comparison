@@ -37,6 +37,19 @@ TEAM_COMPARISON_METRICS = (
     "pace",
 )
 
+# Optional Team Summaries columns: overall strength, shot profile, and the defensive
+# four factors. Older seasons lack some of them; they are omitted, never imputed.
+HISTORICAL_TEAM_ADVANCED_COLUMNS = {
+    "srs": "simple_rating",
+    "ts_percent": "true_shooting_pct",
+    "x3p_ar": "three_point_attempt_rate",
+    "opp_e_fg_percent": "opp_effective_field_goal_pct",
+    "opp_tov_percent": "opp_turnover_pct",
+    "drb_percent": "defensive_rebound_pct",
+    "opp_ft_fga": "opp_free_throw_rate",
+}
+TEAM_ADVANCED_METRICS = tuple(HISTORICAL_TEAM_ADVANCED_COLUMNS.values())
+
 
 METRIC_ALIASES: dict[str, tuple[str, ...]] = {
     "player_id": ("PERSON_ID", "PLAYER_ID", "PLAYERID", "ID"),
@@ -302,12 +315,19 @@ class SchemaResolver:
                 "o_rtg": "offensive_rating",
                 "d_rtg": "defensive_rating",
                 "n_rtg": "net_rating",
+                **HISTORICAL_TEAM_ADVANCED_COLUMNS,
             }
         )
-        for metric in TEAM_COMPARISON_METRICS:
+        advanced_features = tuple(
+            metric
+            for metric in TEAM_ADVANCED_METRICS
+            if metric in frame.columns and pd.to_numeric(frame[metric], errors="coerce").notna().any()
+        )
+        for metric in (*TEAM_COMPARISON_METRICS, *advanced_features):
             frame[metric] = pd.to_numeric(frame[metric], errors="coerce")
-        for metric in ("turnover_pct", "offensive_rebound_pct"):
-            frame[metric] = frame[metric].where(frame[metric] <= 1, frame[metric] / 100)
+        for metric in ("turnover_pct", "offensive_rebound_pct", "opp_turnover_pct", "defensive_rebound_pct"):
+            if metric in frame.columns:
+                frame[metric] = frame[metric].where(frame[metric] <= 1, frame[metric] / 100)
 
         clean = frame.dropna(subset=["team_id", "team_name", "season"]).copy()
         clean["team_id"] = clean["team_id"].astype("string")
@@ -319,11 +339,11 @@ class SchemaResolver:
         return ResolvedSeasonFrame(
             frame=clean.loc[:, [
                 "profile_id", "team_id", "season", "name", "team_codes", "team_names",
-                *TEAM_COMPARISON_METRICS,
+                *TEAM_COMPARISON_METRICS, *advanced_features,
             ]],
             source_table="historical_csv:team_season",
             base_features=TEAM_COMPARISON_METRICS,
-            advanced_features=(),
+            advanced_features=advanced_features,
         )
 
     def _require_ready_catalog(self, report: CatalogReport) -> None:

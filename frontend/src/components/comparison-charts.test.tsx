@@ -181,3 +181,20 @@ it("sizes every chart from its container instead of a fixed canvas", () => {
     expect(wrapper.querySelector(".recharts-responsive-container")).not.toBeNull();
   });
 });
+
+it("team advanced scatter plots true shooting against opponent eFG%", () => {
+  const advancedTeam: RankedMatch = {
+    ...teamMatch,
+    metrics: {
+      ...teamMatch.metrics,
+      advanced: [
+        advancedMetric("simple_rating", "SRS", 5.4, 4.1),
+        advancedMetric("true_shooting_pct", "TS%", 0.598, 0.59),
+        advancedMetric("opp_effective_field_goal_pct", "Opp eFG%", 0.531, 0.529),
+      ],
+    },
+  };
+  render(<ComparisonCharts kind="team" selected={selected} activeMatch={advancedTeam} matches={[advancedTeam, secondTeam]} />);
+  fireEvent.click(screen.getByRole("button", { name: "Advanced" }));
+  expect(screen.getByText(/Pool distribution: TS% vs Opp eFG%/)).toBeInTheDocument();
+});
