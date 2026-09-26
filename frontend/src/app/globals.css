@@ -496,7 +496,8 @@ h1 {
 .delta-card, .scatter-card { min-height: 18rem; }
 .radar-card { grid-column: 1 / -1; }
 
-.chart-wrap { height: 14rem; margin-top: 0.5rem; }
+/* Tall enough for one readable delta row per player metric (12 at most). */
+.chart-wrap { height: 22rem; margin-top: 0.5rem; }
 .chart-unavailable { padding: 2rem; color: var(--muted-ink); font-size: 0.875rem; text-align: center; }
 
 /* ===== Responsive overrides ===== */
@@ -511,6 +512,7 @@ h1 {
   .comparison-body { grid-template-columns: 1fr; }
   .charts-grid { grid-template-columns: 1fr; }
   .filter-controls { flex-direction: column; }
+  .chart-wrap { height: 18rem; }
 }
 
 /* ===== Hover effects for new interactive elements ===== */

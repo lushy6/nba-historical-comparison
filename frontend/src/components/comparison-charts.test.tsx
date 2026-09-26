@@ -172,3 +172,12 @@ it("switches to advanced and shows BPM label", () => {
   fireEvent.click(screen.getByRole("button", { name: "Advanced" }));
   expect(screen.getAllByText(/BPM/).length).toBeGreaterThan(0);
 });
+
+it("sizes every chart from its container instead of a fixed canvas", () => {
+  const { container } = render(<ComparisonCharts kind="player" selected={selected} activeMatch={playerMatch} matches={matches} />);
+  const wrappers = container.querySelectorAll(".radar-wrap, .chart-wrap");
+  expect(wrappers).toHaveLength(3);
+  wrappers.forEach((wrapper) => {
+    expect(wrapper.querySelector(".recharts-responsive-container")).not.toBeNull();
+  });
+});
