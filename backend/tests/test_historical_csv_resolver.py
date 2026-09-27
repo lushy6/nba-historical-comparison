@@ -241,7 +241,11 @@ def test_historical_labels_are_season_specific_verified_and_stably_deduplicated(
     assert frame.loc["beacon01:2015", "team_names"] == ""
 
 
-def test_historical_affiliations_exclude_unverified_aggregate_markers(tmp_path) -> None:
+def test_historical_two_team_marker_is_the_season_total(tmp_path) -> None:
+    """Basketball-Reference writes "2TM" (not "TOT") since 2024-25, and the local
+    catalog uses only that form. It must be read as the season total, exactly
+    like "TOT", and never summed with the per-team rows. Until 2026-09-27 it was,
+    and this fixture's player came out at 4,170 points: three times 1,390."""
     directory = tmp_path / "historical"
     build_historical_csv_source(directory)
     add_traded_player(directory, include_total=True)
@@ -259,9 +263,42 @@ def test_historical_affiliations_exclude_unverified_aggregate_markers(tmp_path) 
     player = frame.set_index("profile_id").loc["switch01:2023"]
     assert player["team_codes"] == "AUR|HBR"
     assert player["team_names"] == "Aurora Comets|Harbor Pilots"
-    # Existing non-TOT aggregation is preserved; synthetic totals need a separate statistics fix.
-    assert player["points"] == 4170
-    assert player["per"] == pytest.approx(19000 / 700)
+    # Identical to the "TOT" case in test_historical_total_row_keeps_all_verified_affiliations.
+    assert player["points"] == 1390
+    assert player["per"] == 30
+    assert player["win_shares"] == pytest.approx(8.2)
+
+
+def test_historical_three_team_marker_is_the_season_total(tmp_path) -> None:
+    directory = tmp_path / "historical"
+    build_historical_csv_source(directory)
+    for filename in ("Player Totals.csv", "Advanced.csv", "Player Per Game.csv"):
+        with (directory / filename).open(encoding="utf-8", newline="") as file:
+            rows = list(csv.DictReader(file))
+        for team in ("3TM", "HBR", "AUR", "HBR2"):
+            row = {**rows[0], "player_id": "trio01", "player": "Trio Wing", "team": team}
+            if filename == "Player Totals.csv":
+                # The total row carries the season; per-team rows are parts of it.
+                row["pts"] = 1500 if team == "3TM" else 500
+            rows.append(row)
+        write_csv(directory / filename, rows)
+    catalog = DatasetCatalog(tmp_path / "missing.sqlite", historical_data_path=directory)
+
+    frame = SchemaResolver(catalog).resolve_player_seasons().frame.set_index("profile_id")
+
+    assert frame.loc["trio01:2023", "points"] == 1500
+    assert frame["points"].max() == 1500  # nothing summed past the season total
+
+
+@pytest.mark.parametrize(
+    ("team", "expected"),
+    [("TOT", True), ("2TM", True), ("3tm", True), (" 4TM ", True), ("10TM", True),
+     ("LAL", False), ("TM", False), ("2TMX", False), ("", False), (None, False)],
+)
+def test_multi_team_total_marker(team, expected) -> None:
+    from app.resolver import _is_multi_team_total
+
+    assert _is_multi_team_total(pd.Series([team], dtype="object")).tolist() == [expected]
 
 
 def test_historical_total_without_individual_rows_has_no_invented_affiliation(tmp_path) -> None:

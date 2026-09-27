@@ -96,6 +96,21 @@ HISTORICAL_TEAM_SUMMARIES = "Team Summaries.csv"
 HISTORICAL_PLAYER_KEY = ("season", "lg", "player_id", "team")
 HISTORICAL_LEAGUES = {"NBA", "BAA"}
 
+# Basketball-Reference labels a traded player's season-total row "TOT" in older
+# exports and "2TM", "3TM", ... (number of teams) since 2024-25. The local
+# catalog uses only the new form: 3,051 such rows in Player Totals.csv and no
+# "TOT" (checked 2026-09-27). Missing the new form summed the total row with the
+# per-team rows and counted every traded season two or three times.
+MULTI_TEAM_TOTAL_PATTERN = r"TOT|\d+TM"
+
+
+def _is_multi_team_total(team: pd.Series) -> pd.Series:
+    """True where a team code marks a multi-team season total, not a real team."""
+    return (
+        team.astype("string").str.strip().str.upper()
+        .str.fullmatch(MULTI_TEAM_TOTAL_PATTERN).fillna(False).astype(bool)
+    )
+
 
 class SchemaResolutionError(RuntimeError):
     """Raised when the supplied dataset cannot satisfy an analytical contract."""
@@ -138,7 +153,7 @@ class SchemaResolver:
                 & source_frame["team_name"].notna()
                 & source_frame["team_id"].ne("")
                 & source_frame["team_name"].ne("")
-                & source_frame["team_id"].str.upper().ne("TOT")
+                & ~_is_multi_team_total(source_frame["team_id"])
             )
             source_frame.loc[valid_team, "team_codes"] = source_frame.loc[valid_team, "team_id"]
             source_frame.loc[valid_team, "team_names"] = source_frame.loc[valid_team, "team_name"]
@@ -403,12 +418,9 @@ class SchemaResolver:
             frame[column] = pd.to_numeric(frame[column], errors="coerce")
 
         key_columns = ["season", "lg", "player_id"]
-        total_rows = frame.loc[
-            frame["team"].astype("string").str.upper() == "TOT"
-        ].drop_duplicates(subset=key_columns, keep="first")
-        non_total_rows = frame.loc[
-            frame["team"].astype("string").str.upper() != "TOT"
-        ]
+        is_total = _is_multi_team_total(frame["team"])
+        total_rows = frame.loc[is_total].drop_duplicates(subset=key_columns, keep="first")
+        non_total_rows = frame.loc[~is_total]
         verified_affiliations = non_total_rows.loc[
             non_total_rows["team_name"].notna() & non_total_rows["team_name"].ne("")
         ]
