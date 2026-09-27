@@ -48,6 +48,8 @@ Rank the Top-15 most statistically similar NBA/BAA player or team seasons from t
 - **P3.2 Clean up** (NHC-4). Delete `.worktrees/similarity-discovery-upgrade` after confirming it has no unique files (`git status` inside it, or diff against `main`). Delete the merged branch locally and on origin.
 - **P3.3 CI** (NHC-5). Add a GitHub Actions workflow running `pytest` (fixture-only tests) and `npm run lint && npm run typecheck && npm test`.
 
+**Status 2026-09-27:** Added `.github/workflows/ci.yml` for pushes and pull requests targeting the actual default branch, `main`. The workflow runs backend pytest and frontend `npm ci`, lint, typecheck, and tests without downloading historical data. Baseline and after-work validation both passed: backend 90/90, frontend 61/61, lint and typecheck clean. GitHub Actions itself remains unverified until a push, which this task forbids.
+
 ## Sequencing
 
 P1.1 comes first; everything else inherits correct aggregates from it. P2.1 changes scores, so ship it in the same release as P1 with a README note. P3 is independent.
