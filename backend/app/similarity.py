@@ -123,11 +123,7 @@ class SimilarityEngine:
                 + "."
             )
 
-        usable_base = tuple(
-            feature
-            for feature in base_features
-            if pd.notna(selected[feature])
-        )
+        usable_base = tuple(feature for feature in base_features if pd.notna(selected[feature]))
         if not usable_base:
             raise ComparisonError("The requested profile has no recorded base measures to compare.")
 
@@ -136,20 +132,36 @@ class SimilarityEngine:
             for feature in advanced_features
             if feature in frame.columns and pd.notna(selected[feature])
         )
-        features = tuple((*usable_base, *usable_advanced))
-        scoped_candidates = filter_frame(
-            frame.loc[frame["profile_id"] != selected_profile_id], scope, kind=kind
-        ).dropna(subset=list(features)).drop_duplicates(subset=["profile_id"], keep="first")
-        # The match pool narrows which profiles are ranked, not the yardstick: scaling and
-        # radar domains come from the season/team scope, so a season scores the same
-        # whether or not the selected entity's other seasons are listed beside it.
+        scoped = filter_frame(frame, scope, kind=kind).drop_duplicates(
+            subset=["profile_id"], keep="first"
+        )
+        if kind == "player":
+            # A player stat missing for an entire season is not a comparable ranking
+            # dimension. An isolated missing value still excludes that profile.
+            season_coverage = scoped.groupby("season", dropna=False)[list(usable_base)].count()
+            features = tuple(
+                feature for feature in usable_base if season_coverage[feature].gt(0).all()
+            )
+        else:
+            # Team base measures describe a fixed model; unavailable older teams do not
+            # reduce every modern team's comparison to a few shared dimensions.
+            features = usable_base
+        if not features:
+            raise ComparisonError("No base measures are shared across the selected seasons.")
+
+        scoped_reference = scoped.dropna(subset=list(features))
+        scoped_candidates = scoped_reference.loc[
+            scoped_reference["profile_id"] != selected_profile_id
+        ]
+        # The reference includes the selected row when it is in scope, making scores
+        # symmetric when the selection is reversed. Match-pool filtering does not alter it.
         complete_candidates = filter_match_pool(scoped_candidates, selected_profile_id, scope.pool)
         if complete_candidates.empty:
             raise ComparisonError(
                 "No eligible historical alternatives remain for the selected filters."
             )
 
-        scaler = StandardScaler().fit(scoped_candidates.loc[:, features])
+        scaler = StandardScaler().fit(scoped_reference.loc[:, features])
         candidate_values = scaler.transform(complete_candidates.loc[:, features])
         selected_values = scaler.transform(selected.to_frame().T.loc[:, features])
         similarities = cosine_similarity(selected_values, candidate_values).ravel()
@@ -171,12 +183,14 @@ class SimilarityEngine:
             ["similarity", "profile_id"], ascending=[False, True], kind="stable"
         ).head(limit)
 
-        domain_profiles = pd.concat(
-            [selected.to_frame().T.loc[:, features], scoped_candidates.loc[:, features]]
-        )
+        radar_features = (*usable_base, *usable_advanced)
+        domain_profiles = pd.concat([
+            selected.to_frame().T.loc[:, radar_features],
+            scoped_candidates.loc[:, radar_features],
+        ])
         domains = {
             feature: (float(domain_profiles[feature].min()), float(domain_profiles[feature].max()))
-            for feature in features
+            for feature in radar_features
         }
         matches: list[RankedComparison] = []
         for rank, entry in enumerate(ranking.itertuples(index=False), 1):
@@ -189,8 +203,14 @@ class SimilarityEngine:
                     rank=rank,
                     tier=similarity_tier(score),
                     metrics=MetricGroups(
-                        basic=self._radar(domains, selected, match, usable_base),
-                        advanced=self._radar(domains, selected, match, usable_advanced),
+                        basic=self._radar(
+                            domains, selected, match,
+                            tuple(feature for feature in usable_base if pd.notna(match[feature])),
+                        ),
+                        advanced=self._radar(
+                            domains, selected, match,
+                            tuple(feature for feature in usable_advanced if pd.notna(match[feature])),
+                        ),
                     ),
                 )
             )

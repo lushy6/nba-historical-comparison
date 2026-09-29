@@ -39,6 +39,8 @@ Rank the Top-15 most statistically similar NBA/BAA player or team seasons from t
 
 - **P2.1 Rank on base features only, and show advanced metrics when both seasons have them** (NHC-2). Keep this in lock-step with the MLB sibling's P1.1.
   - *Accept:* a symmetry test (A→B score == B→A score) passes, and a 1965 player can appear in a 2020 player's pool when the base features exist for both.
+
+**Status 2026-09-29:** Complete. Player scoring uses base measures recorded in every season of the selected scope, and advanced measures are radar context only when both profiles recorded them. A shared scoped scaler makes a 1965↔2020 fixture score symmetric; the real-catalog slice `arizatr01:2020`↔`chambwi01:1965` scored 0.8 in both directions. Team scoring retains its eight base measures; optional advanced measures no longer gate eligibility. On the local 25,753-row player catalog, `arizatr01:2020` has 25,752 eligible profiles on six base measures (previously 20,477 on 19 base and advanced measures). `ATL:2020` has 1,432 eligible teams on eight base measures (previously 1,313 on 15 measures). README records the scoring change; the full backend suite passes (92 tests), and the unchanged frontend passes lint, typecheck, and 61 Vitest tests in the original checkout. These are scope- and snapshot-dependent comparisons, not a claim that similarity quality improved.
 - **P2.2 Reconsider totals versus rates.** The base metrics are season **totals**, so games played dominates the "shape" after scaling. Evaluate per-game or per-36 inputs behind a flag. Document the result either way.
 
 ### Phase 3: Identity and hygiene
@@ -54,7 +56,7 @@ Rank the Top-15 most statistically similar NBA/BAA player or team seasons from t
 
 P1.1 comes first; everything else inherits correct aggregates from it. P2.1 changes scores, so ship it in the same release as P1 with a README note. P3 is independent.
 
-## Validation (documented only; not run in this review)
+## Validation (backend and frontend suites run 2026-09-29)
 
 ```powershell
 $env:NBA_HISTORICAL_DATA_PATH = "$PWD\data\historical"

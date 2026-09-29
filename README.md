@@ -90,13 +90,15 @@ All comparison responses include:
 - `match`: Same object as `matches[0]` (compatibility alias)
 - `matches`: Up to 15 ranked alternatives, each containing `profile`, `similarity_score`, `power_ranking` (with `rank` and `tier`), and `metrics` (with `basic` and `advanced` arrays of `RadarMetric` points)
 - `scope`: Applied bounds including `season_from`, `season_to`, `team`, `pool`, and `eligible_count`
-- `features_used`: The verified statistical dimensions used for the cosine similarity calculation
+- `features_used`: The base measures that determined the cosine similarity score
 
-Each `RadarMetric` point contains `metric` (canonical key), `label` (display label), `selected_value`, `match_value`, `selected_normalized`, and `match_normalized`. Missing historic measures are omitted from the feature list entirely — zero is never an imputed substitute.
+Each `RadarMetric` point contains `metric` (canonical key), `label` (display label), `selected_value`, `match_value`, `selected_normalized`, and `match_normalized`. Player scoring uses base measures recorded in every season of the selected scope. A player season missing an otherwise available base measure is excluded; an era-wide missing measure is omitted from that scope's scoring dimensions. Base measures omitted from scoring, and advanced measures, can still appear in the radar when both seasons recorded them. No missing value is filled with zero. The scaler uses the same scoped, base-complete population whichever player season is selected, so a pair scored in both directions gets the same score.
+
+This scoring rule changed on 2026-09-29, and earlier similarity scores are not directly comparable. On the local 25,753-row historical player catalog, the full-history comparison for `arizatr01:2020` now uses six shared base measures and has 25,752 eligible alternatives; the prior method used 19 base and advanced measures and had 20,477. Counts depend on the local data snapshot and the selected scope.
 
 ### Team metrics
 
-Team comparisons use eight basic measures from `Team Summaries.csv` (eFG%, TOV%, ORB%, FT rate, offensive/defensive/net rating, pace) plus, when the columns are present, seven advanced measures: SRS, TS%, 3PA rate, and the defensive four factors (opponent eFG%, opponent TOV%, DRB%, opponent FT rate). Like player advanced metrics they join the similarity calculation, so a season is only compared with candidates that recorded every measure it has — for modern teams this means 1980 onward, when the 3PA rate begins.
+Team comparisons rank on eight basic measures from `Team Summaries.csv` (eFG%, TOV%, ORB%, FT rate, offensive/defensive/net rating, pace). Seven optional advanced measures — SRS, TS%, 3PA rate, and the defensive four factors — appear in the radar when both teams recorded them. Teams missing a required basic measure remain ineligible. On the local catalog, Atlanta's 2020 season now has 1,432 eligible alternatives using eight scoring measures, compared with 1,313 alternatives using 15 measures under the previous rule.
 
 ### Source format and identity health
 
