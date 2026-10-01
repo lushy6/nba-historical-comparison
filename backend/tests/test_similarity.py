@@ -27,6 +27,29 @@ def player_frame() -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def test_isolated_missing_base_value_excludes_only_that_candidate() -> None:
+    frame = player_frame()
+    complete_peer = frame.iloc[1].copy()
+    complete_peer["profile_id"] = "complete-peer:" + str(complete_peer["season"])
+    frame = pd.concat([frame, complete_peer.to_frame().T], ignore_index=True)
+    incomplete_id = frame.loc[1, "profile_id"]
+    frame.loc[1, PLAYER_BASE_METRICS[0]] = float("nan")
+
+    result = SimilarityEngine().compare(
+        frame,
+        selected_profile_id="7:2022-23",
+        base_features=PLAYER_BASE_METRICS,
+        advanced_features=(),
+        scope=ComparisonScope(),
+        kind="player",
+    )
+
+    assert result.features_used == PLAYER_BASE_METRICS
+    matches = {match.profile.profile_id for match in result.matches}
+    assert incomplete_id not in matches
+    assert complete_peer["profile_id"] in matches
+
+
 def test_similarity_returns_the_closest_other_profile_with_a_bounded_score() -> None:
     result = SimilarityEngine().compare(
         player_frame(),

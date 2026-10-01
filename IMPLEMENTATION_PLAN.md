@@ -37,6 +37,8 @@ Rank the Top-15 most statistically similar NBA/BAA player or team seasons from t
 
 ### Phase 2: Similarity semantics
 
+**Review follow-ups completed 2026-09-30.** Retain the approved six-dimension all-history default for era coverage; README explains its volume sensitivity and recommends a 1980+ scope for richer modern comparisons (12 base dimensions; 20,549 eligible profiles for Ariza 2020 in the current catalog). The full-reference Ariza 2020/Chamberlain 1965 score is 2.1; the earlier 0.8 was a three-profile slice, not the full catalog. Documented two-profile score behavior and directional team eligibility. Added an isolated-missing-base regression: the incomplete profile is excluded while a complete peer keeps that season's dimension available. Backend: 93 tests pass. No further scoring algorithm or frontend changes.
+
 - **P2.1 Rank on base features only, and show advanced metrics when both seasons have them** (NHC-2). Keep this in lock-step with the MLB sibling's P1.1.
   - *Accept:* a symmetry test (A→B score == B→A score) passes, and a 1965 player can appear in a 2020 player's pool when the base features exist for both.
 
