@@ -65,6 +65,15 @@ export function ComparisonDashboard({ comparison, kind, activeMatchId, onActiveM
             <p className="card-copy">
               Ranked #{activeMatch.power_ranking.rank} among {comparison.scope.eligible_count} eligible profiles using {comparison.features_used.length} verified measures.
             </p>
+            <details className="measure-disclosure">
+              <summary>Measures used for this score</summary>
+              <ul>
+                {comparison.features_used.map((feature) => <li key={feature}><code>{feature}</code></li>)}
+              </ul>
+              {kind === "team" && (
+                <p>The selected season determines which recorded measures and profiles are eligible. Reversing this team comparison can change the score.</p>
+              )}
+            </details>
             <progress className="tier-progress" value={activeMatch.similarity_score} max={100}>
               {activeMatch.similarity_score}%
             </progress>
