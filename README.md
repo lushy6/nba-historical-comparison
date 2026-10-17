@@ -1,10 +1,53 @@
-﻿# NBA Historical Comparison
+# NBA Historical Comparison
+
+[![Comparison checks](https://github.com/lushy6/nba-historical-comparison/actions/workflows/ci.yml/badge.svg)](https://github.com/lushy6/nba-historical-comparison/actions/workflows/ci.yml)
+
+**Python · FastAPI · pandas · scikit-learn · Next.js · TypeScript**
+
+![Comparison using explicitly fictional demo data](docs/preview.png)
+
+## Quick start with fictional sample data
+
+Python 3.12+ and Node.js 22+. The included catalog contains 24 fictional player seasons and 8 fictional team seasons. It exercises the real importer, API, filters, search, and charts. These synthetic scores are not NBA findings.
+
+From the repository root:
+
+```sh
+python -m venv .venv
+# Windows: .venv\Scripts\activate
+# macOS/Linux: source .venv/bin/activate
+python -m pip install -r backend/requirements.txt
+python scripts/create_demo.py
+```
+
+Start the API in PowerShell:
+
+```powershell
+$env:NBA_HISTORICAL_DATA_PATH = (Resolve-Path data/demo).Path
+cd backend
+python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+```
+
+On macOS/Linux, set `export NBA_HISTORICAL_DATA_PATH="$PWD/data/demo"` from the repository root, then start the API from `backend`.
+
+In another terminal:
+
+```powershell
+cd frontend
+npm ci
+$env:NEXT_PUBLIC_DEMO_DATA = "true"
+npm run dev
+```
+
+On macOS/Linux use `export NEXT_PUBLIC_DEMO_DATA=true`. Open `http://localhost:3000`, search **Aster**, and select a season. Unset both demo variables when switching to a verified historical catalog.
+
+**Verified October 17, 2026:** 94 backend tests and 61 frontend tests passed, alongside lint and a production build. Production dependency audit: zero reported vulnerabilities after security updates. Five development-only lint dependency findings remain; see [verification notes](docs/VERIFICATION.md).
 
 A local-first NBA historical-comparison application. The FastAPI backend discovers and normalizes player and team season data from a verified historical CSV catalog, then returns up to 15 statistically ranked historical matches. The Next.js frontend presents those matches through a filterable, animated comparison dashboard with radar, delta-bar, and scatter charts.
 
 ## Status
 
-The application is ready to run locally. You must supply the historical CSV catalog before starting the backend.
+The application is ready to run locally. Use the included fictional demo catalog, or supply a verified historical CSV catalog before starting the backend.
 
 ## Data sources
 
@@ -137,4 +180,4 @@ npm run typecheck
 npm run build
 ```
 
-The project intentionally never downloads, embeds, or commits the historical CSV data, SQLite database, or any NBA brand assets.
+The project does not bundle real historical CSV data, a real NBA SQLite database, or NBA brand assets. Only the explicitly fictional demo catalog is included.
