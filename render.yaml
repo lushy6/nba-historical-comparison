@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: nba-historical-comparison-api
+    runtime: python
+    plan: free
+    rootDir: .
+    buildCommand: pip install -r backend/requirements.txt && python scripts/create_demo.py
+    startCommand: cd backend && uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.7
+      - key: NBA_HISTORICAL_DATA_PATH
+        value: /opt/render/project/src/data/demo
+      # Set to the Vercel site URL in the Render dashboard (no trailing slash).
+      - key: CORS_ALLOWED_ORIGINS
+        sync: false

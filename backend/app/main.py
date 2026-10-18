@@ -1,5 +1,6 @@
 ﻿"""NBA Historical Comparison API - scoped filter and rich comparison endpoints."""
 
+import os
 from functools import lru_cache
 from typing import Annotated, Literal
 
@@ -37,6 +38,15 @@ from app.similarity import ComparisonError, RankedComparison, SeasonProfile, Sim
 
 EntityKind = Literal["player", "team"]
 
+LOCAL_ORIGINS = ["http://localhost:3000", "http://127.0.0.1:3000"]
+
+
+def _allowed_origins() -> list[str]:
+    """Local dev origins plus any comma-separated origins in CORS_ALLOWED_ORIGINS."""
+    extra = os.environ.get("CORS_ALLOWED_ORIGINS", "")
+    return LOCAL_ORIGINS + [origin.strip().rstrip("/") for origin in extra.split(",") if origin.strip()]
+
+
 app = FastAPI(
     title="NBA Historical Comparison API",
     version="0.2.0",
@@ -44,7 +54,7 @@ app = FastAPI(
 )
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_origins=_allowed_origins(),
     allow_credentials=False,
     allow_methods=["GET"],
     allow_headers=[],
