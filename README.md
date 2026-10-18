@@ -4,6 +4,8 @@
 
 **Python · FastAPI · pandas · scikit-learn · Next.js · TypeScript**
 
+**[Live demo](https://nba-historical-comparison.vercel.app/)** (fictional sample data; try searching "Aster"). The API runs on a free Render instance, so the first search after a period of inactivity can take about a minute while it wakes up.
+
 ![Comparison using explicitly fictional demo data](docs/preview.png)
 
 ## Quick start with fictional sample data
@@ -41,7 +43,7 @@ npm run dev
 
 On macOS/Linux use `export NEXT_PUBLIC_DEMO_DATA=true`. Open `http://localhost:3000`, search **Aster**, and select a season. Unset both demo variables when switching to a verified historical catalog.
 
-**Verified October 17, 2026:** 94 backend tests and 61 frontend tests passed, alongside lint and a production build. Production dependency audit: zero reported vulnerabilities after security updates. Five development-only lint dependency findings remain; see [verification notes](docs/VERIFICATION.md).
+**Verified October 17, 2026:** 94 backend tests (96 after two CORS-configuration tests were added and re-run October 18, 2026) and 61 frontend tests passed, alongside lint and a production build. Production dependency audit: zero reported vulnerabilities after security updates. Five development-only lint dependency findings remain; see [verification notes](docs/VERIFICATION.md).
 
 A local-first NBA historical-comparison application. The FastAPI backend discovers and normalizes player and team season data from a verified historical CSV catalog, then returns up to 15 statistically ranked historical matches. The Next.js frontend presents those matches through a filterable, animated comparison dashboard with radar, delta-bar, and scatter charts.
 
